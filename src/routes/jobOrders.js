@@ -1,0 +1,126 @@
+const express = require('express');
+const router = express.Router();
+const supabase = require('../supabaseClient');
+
+// Helper to generate JB-XXXX ID
+async function generateJobOrderID() {
+    // Get count of existing job orders to determine next ID
+    const { count, error } = await supabase
+        .from('job_orders')
+        .select('*', { count: 'exact', head: true });
+        
+    if (error) throw error;
+    
+    // Simple incremental logic for the prototype (JB-0001, JB-0002)
+    const nextNum = (count || 0) + 1;
+    return `JB-${nextNum.toString().padStart(4, '0')}`;
+}
+
+// GET all job orders
+router.get('/', async (req, res) => {
+    const { data, error } = await supabase
+        .from('job_orders')
+        .select('*, assigned_by:users!job_orders_assigned_by_fkey(name), assigned_to:users!job_orders_assigned_to_fkey(name)')
+        .order('created_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+});
+
+// GET single job order
+router.get('/:id', async (req, res) => {
+    const { data, error } = await supabase
+        .from('job_orders')
+        .select('*, assigned_by:users!job_orders_assigned_by_fkey(name), assigned_to:users!job_orders_assigned_to_fkey(name), work_orders(*)')
+        .eq('id', req.params.id)
+        .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data) return res.status(404).json({ error: 'Job order not found' });
+    res.json(data);
+});
+
+// POST new job order
+router.post('/', async (req, res) => {
+    const { title, description, customer_name, status, assigned_by, assigned_to, priority } = req.body;
+
+    if (!title) {
+        return res.status(400).json({ error: 'Title is required' });
+    }
+
+    try {
+        const id = await generateJobOrderID();
+
+        const { data, error } = await supabase
+            .from('job_orders')
+            .insert([{ 
+                id,
+                title, 
+                description, 
+                customer_name, 
+                status: status || 'open',
+                assigned_by,
+                assigned_to,
+                priority
+            }])
+            .select();
+
+        if (error) return res.status(500).json({ error: error.message });
+        res.status(201).json(data[0]);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to generate ID or create job order' });
+    }
+});
+
+// PUT update job order
+router.put('/:id', async (req, res) => {
+    const { title, description, customer_name, status, assigned_by, assigned_to, priority } = req.body;
+
+    const { data, error } = await supabase
+        .from('job_orders')
+        .update({ 
+            title, 
+            description, 
+            customer_name, 
+            status, 
+            assigned_by,
+            assigned_to,
+            priority,
+            updated_at: new Date() 
+        })
+        .eq('id', req.params.id)
+        .select();
+
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data.length) return res.status(404).json({ error: 'Job order not found' });
+    res.json(data[0]);
+});
+
+// DELETE job order and its associated work orders
+router.delete('/:id', async (req, res) => {
+    // 1. Delete associated work orders first to satisfy foreign key constraints
+    const { error: woError } = await supabase
+        .from('work_orders')
+        .delete()
+        .eq('ref_id_jo', req.params.id);
+
+    if (woError) {
+        console.error('Work Order deletion error:', woError.message);
+        return res.status(500).json({ error: 'Failed to delete associated work orders' });
+    }
+
+    // 2. Delete the job order
+    const { error: joError } = await supabase
+        .from('job_orders')
+        .delete()
+        .eq('id', req.params.id);
+
+    if (joError) {
+        console.error('Job Order deletion error:', joError.message);
+        return res.status(500).json({ error: 'Failed to delete job order' });
+    }
+
+    res.json({ message: 'Job order and associated work orders deleted successfully' });
+});
+
+module.exports = router;

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Management</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="background-effects">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="noise"></div>
+    </div>
+
+    <div id="app" class="app-container">
+        
+        <!-- 1. Login View -->
+        <main id="login-view" class="view active-view">
+            <div class="glass-card login-card auth-card">
+                <h2>Welcome Back</h2>
+                <p>Enter your credentials to access the system.</p>
+                
+                <form id="auth-form" class="auth-form">
+                    <div class="form-group floating-label">
+                        <input type="text" id="auth-username" required placeholder=" " autocomplete="off">
+                        <label for="auth-username">Username or Email</label>
+                    </div>
+                    <div class="form-group floating-label">
+                        <input type="password" id="auth-password" required placeholder=" ">
+                        <label for="auth-password">Password</label>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-block btn-auth" id="btn-submit-auth">
+                        Sign In <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                    
+                    <div class="auth-footer">
+                        <a href="#">Forgot password?</a>
+                    </div>
+                </form>
+            </div>
+        </main>
+
+        <!-- 2. Dashboard View -->
+        <main id="dashboard-view" class="view hidden-view">
+            <!-- Top Navigation -->
+            <header class="dashboard-header">
+                <div></div> <!-- Empty div to push user profile to the right -->
+                
+                <div class="user-profile">
+                    <div class="avatar" id="current-user-avatar">?</div>
+                    <div class="user-details">
+                        <span id="current-user-name">User Name</span>
+                        <span id="current-user-role" class="badge role-badge">Role</span>
+                    </div>
+                    <button class="btn btn-icon btn-glass" id="btn-logout" title="Logout">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </div>
+            </nav>
+
+            <div class="dashboard-content">
+                <header class="section-header">
+                    <div class="header-text">
+                        <h1>Job Orders</h1>
+                        <p>Manage and track all ongoing tasks and assignments.</p>
+                    </div>
+                    <button class="btn btn-primary" id="btn-new-job">
+                        <i class="fa-solid fa-plus"></i> New Job Order
+                    </button>
+                </header>
+
+                <!-- Job Orders Grid -->
+                <div id="job-orders-container" class="grid-container">
+                    <div class="line-loader w-full"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Modals -->
+
+        <!-- 3. New Job Order Modal -->
+        <div id="new-job-modal" class="modal-overlay hidden">
+            <div class="glass-card modal-content">
+                <div class="modal-header">
+                    <h2>Create Job Order</h2>
+                    <button class="btn btn-icon btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <form id="new-job-form">
+                    <div class="form-group">
+                        <label>Title</label>
+                        <input type="text" id="nj-title" required placeholder="e.g. Server Maintenance">
+                    </div>
+                    <div class="form-group">
+                        <label>Customer Name</label>
+                        <input type="text" id="nj-customer" required placeholder="e.g. Acme Corp">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Priority</label>
+                            <select id="nj-priority">
+                                <option value="1">1 - Low</option>
+                                <option value="2">2</option>
+                                <option value="3" selected>3 - Medium</option>
+                                <option value="4">4</option>
+                                <option value="5">5 - Critical</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Assigned To</label>
+                            <select id="nj-assigned">
+                                <!-- Populated by JS -->
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Description (Optional)</label>
+                        <textarea id="nj-desc" rows="3" placeholder="Provide background information..."></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-close-modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Create Order</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 4. Job Order Detail Modal (for Work Orders) -->
+        <div id="job-detail-modal" class="modal-overlay hidden">
+            <div class="glass-card modal-content modal-large">
+                <div class="modal-header">
+                    <div class="job-detail-title">
+                        <h2 id="jd-title">Loading...</h2>
+                        <span id="jd-id" class="badge">JB-XXXX</span>
+                        <span id="jd-status" class="badge status-open">Open</span>
+                    </div>
+                    <button class="btn btn-icon btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                
+                <div class="job-meta-grid">
+                    <div class="meta-item">
+                        <span class="meta-label">Customer</span>
+                        <span class="meta-val" id="jd-customer">-</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Assigned To</span>
+                        <span class="meta-val" id="jd-assigned">-</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Priority</span>
+                        <span class="meta-val" id="jd-priority">-</span>
+                    </div>
+                </div>
+
+                <div class="job-desc">
+                    <span class="meta-label">Description</span>
+                    <p id="jd-desc">-</p>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="section-header small">
+                    <h3>Work Orders</h3>
+                    <button class="btn btn-outline btn-sm" id="btn-new-work">
+                        <i class="fa-solid fa-plus"></i> Add Work
+                    </button>
+                </div>
+
+                <!-- Create Work Order Form (Hidden by default) -->
+                <form id="new-work-form" class="glass-panel hidden">
+                    <h4>New Work Order</h4>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <input type="text" id="nw-desc" required placeholder="What are you working on?">
+                    </div>
+                    <div class="form-actions row-right">
+                        <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-work">Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-sm">Start Work</button>
+                    </div>
+                </form>
+
+                <!-- List of Work Orders -->
+                <div id="work-orders-list" class="work-orders-list">
+                    <!-- Populated via JS -->
+                </div>
+
+                <div class="modal-footer mt-4">
+                    <button type="button" class="btn btn-outline btn-close-modal">Close</button>
+                    <button type="button" class="btn btn-success" id="btn-close-job">Mark Job Complete</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Notifications Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
