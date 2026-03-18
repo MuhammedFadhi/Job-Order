@@ -605,15 +605,15 @@ function calcWorkedTime(woId, timeIn, timeOut) {
     
     // Fallback for simple calculation if no history exists (legacy or direct API data)
     if (history.length === 0) {
-        if (timeOut) return new Date(timeOut).getTime() - new Date(timeIn).getTime();
+        if (timeOut) return Math.max(0, new Date(timeOut).getTime() - new Date(timeIn).getTime());
         if (woState.accumulatedTime) {
             let total = woState.accumulatedTime;
             if (!woState.isPaused && woState.lastResumedAt) {
                 total += Date.now() - woState.lastResumedAt;
             }
-            return total;
+            return Math.max(0, total);
         }
-        return Date.now() - new Date(timeIn).getTime();
+        return Math.max(0, Date.now() - new Date(timeIn).getTime());
     }
     
     let totalWorked = 0;
@@ -1004,9 +1004,10 @@ function startStopwatch(jobId, woId, woDesc, timeInDateString) {
     }
 
     function renderTime(diff) {
-        const hours = Math.floor(diff / 3600000);
-        const mins = Math.floor((diff % 3600000) / 60000);
-        const secs = Math.floor((diff % 60000) / 1000);
+        const safeDiff = Math.max(0, diff);
+        const hours = Math.floor(safeDiff / 3600000);
+        const mins = Math.floor((safeDiff % 3600000) / 60000);
+        const secs = Math.floor((safeDiff % 60000) / 1000);
         timeSpan.textContent = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 
