@@ -86,7 +86,7 @@ router.post('/', async (req, res) => {
 
 // PUT update work order
 router.put('/:id', async (req, res) => {
-    const { status, description, time_out } = req.body;
+    const { status, description, time_out, pause_history } = req.body;
     
     // Auto-set time_out if status is completed and no time_out provided
     let updatedTimeOut = time_out;
@@ -100,6 +100,7 @@ router.put('/:id', async (req, res) => {
             status, 
             description, 
             time_out: updatedTimeOut,
+            pause_history,
             updated_at: new Date() 
         })
         .eq('id', req.params.id)

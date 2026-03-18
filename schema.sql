@@ -36,6 +36,7 @@ CREATE TABLE work_orders (
     description TEXT,
     user_id UUID REFERENCES users(id),
     ref_id_jo TEXT REFERENCES job_orders(id),
+    pause_history JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

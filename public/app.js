@@ -650,10 +650,11 @@ function formatDuration(ms) {
 }
 
 // --- Helper: calculate total worked time from history ---
-function calcWorkedTime(woId, timeIn, timeOut) {
+function calcWorkedTime(woId, timeIn, timeOut, serverHistory) {
     const localPauseState = getPauseState();
     const woState = localPauseState[woId] || {};
-    const history = woState.history || [];
+    // Use server history if provided, otherwise fallback to local
+    const history = (serverHistory && serverHistory.length > 0) ? serverHistory : (woState.history || []);
     
     // Fallback for simple calculation if no history exists (legacy or direct API data)
     if (history.length === 0) {
@@ -702,10 +703,10 @@ function calcWorkedTime(woId, timeIn, timeOut) {
 }
 
 // --- Helper: build timeline HTML from history ---
-function buildTimelineHTML(woId, timeIn, timeOut) {
+function buildTimelineHTML(woId, timeIn, timeOut, serverHistory) {
     const localPauseState = getPauseState();
     const woState = localPauseState[woId] || {};
-    const history = woState.history || [];
+    const history = (serverHistory && serverHistory.length > 0) ? serverHistory : (woState.history || []);
     
     if (history.length === 0 && !timeOut) return '';
     
@@ -780,14 +781,14 @@ function renderWorkOrders(workOrders) {
             : (isPaused ? 'Paused' : 'Ongoing');
 
         // Calculate actual worked time
-        const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out);
+        const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history);
         const workedStr = formatDuration(workedMs);
 
         const woUserId = wo.user_id || (wo.user ? wo.user.id : null);
         const canAct = currentUser && (woUserId === currentUser.id);
 
         // Build timeline
-        const timelineHTML = buildTimelineHTML(wo.id, wo.time_in, wo.time_out);
+        const timelineHTML = buildTimelineHTML(wo.id, wo.time_in, wo.time_out, wo.pause_history);
 
         item.innerHTML = `
             <div class="work-item-top">
@@ -897,6 +898,13 @@ window.completeWorkOrder = async function(workOrderId) {
             pauseState[workOrderId] = woState;
             savePauseState(pauseState);
             
+            // Sync history to server
+            await fetch(`${API_BASE}/work-orders/${workOrderId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pause_history: woState.history })
+            });
+            
             showToast('Work order completed.', 'success');
             openJobDetail(currentJobOrder.id);
             loadDashboard();
@@ -934,6 +942,17 @@ window.toggleWorkOrderPause = function(workOrderId, currentStatus) {
 
     pauseState[workOrderId] = woState;
     savePauseState(pauseState);
+
+    // Sync to server
+    fetch(`${API_BASE}/work-orders/${workOrderId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            // Also update status in DB if needed (optional but good for consistency)
+            status: woState.isPaused ? 'paused' : 'started',
+            pause_history: woState.history 
+        })
+    }).catch(err => console.error('Failed to sync pause state:', err));
 
     if (currentJobOrder) openJobDetail(currentJobOrder.id);
     if (typeof loadDashboard === 'function') loadDashboard();
@@ -1127,6 +1146,16 @@ function togglePauseStopwatch() {
     pauseState[currentActiveWorkOrderId] = woState;
     savePauseState(pauseState);
 
+    // Sync to server
+    fetch(`${API_BASE}/work-orders/${currentActiveWorkOrderId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            status: woState.isPaused ? 'paused' : 'started',
+            pause_history: woState.history 
+        })
+    }).catch(err => console.error('Failed to sync pause state:', err));
+
     // Refresh dashboard cards to reflect paused indicator
     if (typeof loadDashboard === 'function') loadDashboard();
 }
@@ -1267,7 +1296,7 @@ function calculateAdminTimeLapsed(wo) {
     // otherwise fallback to simple duration since we don't sync all pause histories to the server (client-only feature)
     
     // Attempt to use local pause state if available (for the current admin's own work)
-    const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out);
+    const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history);
     return formatDuration(workedMs);
 }
 
@@ -1301,7 +1330,7 @@ function renderAdminJobSummaries(workOrders) {
         }
         
         const job = jobsMap[jobId];
-        const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out);
+        const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history);
         
         job.totalWorkedMs += workedMs;
         job.woCount += 1;
