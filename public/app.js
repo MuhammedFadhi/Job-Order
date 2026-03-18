@@ -236,6 +236,25 @@ function setupEventListeners() {
             loadAdminDashboard(activeTab);
         });
     }
+
+    // Password Visibility Toggles
+    document.querySelectorAll('.password-toggle').forEach(toggle => {
+        toggle.addEventListener('click', () => {
+            const targetId = toggle.dataset.target;
+            const input = document.getElementById(targetId);
+            if (!input) return;
+
+            if (input.type === 'password') {
+                input.type = 'text';
+                toggle.classList.remove('fa-eye-slash');
+                toggle.classList.add('fa-eye');
+            } else {
+                input.type = 'password';
+                toggle.classList.remove('fa-eye');
+                toggle.classList.add('fa-eye-slash');
+            }
+        });
+    });
 }
 
 // --- View Management ---
