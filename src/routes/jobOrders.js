@@ -4,15 +4,25 @@ const supabase = require('../supabaseClient');
 
 // Helper to generate JB-XXXX ID
 async function generateJobOrderID() {
-    // Get count of existing job orders to determine next ID
-    const { count, error } = await supabase
+    // Get the job order with the highest ID string
+    const { data, error } = await supabase
         .from('job_orders')
-        .select('*', { count: 'exact', head: true });
+        .select('id')
+        .order('id', { ascending: false })
+        .limit(1);
         
     if (error) throw error;
     
-    // Simple incremental logic for the prototype (JB-0001, JB-0002)
-    const nextNum = (count || 0) + 1;
+    let nextNum = 1;
+    if (data && data.length > 0) {
+        // Extract number from 'JB-XXXX'
+        const lastId = data[0].id;
+        const lastNum = parseInt(lastId.split('-')[1]);
+        if (!isNaN(lastNum)) {
+            nextNum = lastNum + 1;
+        }
+    }
+    
     return `JB-${nextNum.toString().padStart(4, '0')}`;
 }
 

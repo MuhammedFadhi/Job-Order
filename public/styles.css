@@ -141,13 +141,6 @@ body {
     padding: 2rem;
 }
 
-#login-view, #register-view {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-}
-
 .active-view {
     opacity: 1;
     visibility: visible;
@@ -1413,31 +1406,6 @@ input:focus, select:focus, textarea:focus {
     background: var(--accent-glow);
     padding: 0.2rem 0.5rem;
     border-radius: 4px;
-}/* Password Visibility Toggle */
-.form-group.floating-label {
-    position: relative;
-}
-
-.password-toggle {
-    position: absolute;
-    right: 1.25rem;
-    top: 50%;
-    transform: translateY(-50%);
-    cursor: pointer;
-    color: var(--text-secondary);
-    font-size: 1.1rem;
-    z-index: 10;
-    transition: all 0.3s ease;
-    padding: 0.5rem;
-}
-
-.password-toggle:hover {
-    color: var(--accent-primary);
-}
-
-.form-group.floating-label input[type="password"],
-.form-group.floating-label input[type="text"] {
-    padding-right: 3.5rem; /* Space for the eye icon */
 }
 
 .job-stats-summary {

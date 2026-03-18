@@ -69,16 +69,8 @@ async function initApp() {
             document.getElementById('current-user-name').textContent = currentUser.name;
             document.getElementById('current-user-role').textContent = currentUser.role;
             document.getElementById('current-user-avatar').textContent = currentUser.name.charAt(0);
-            const savedView = localStorage.getItem('currentView') || 'dashboard';
-            
-            // Switch to the saved view
-            if (savedView === 'admin' && currentUser.role === 'Admin') {
-                switchView('admin');
-                loadAdminDashboard();
-            } else {
-                switchView('dashboard');
-                loadDashboard();
-            }
+            switchView('dashboard');
+            loadDashboard();
             
             // Show Admin Nav if user is Admin
             if (currentUser && currentUser.role === 'Admin') {
@@ -236,25 +228,6 @@ function setupEventListeners() {
             loadAdminDashboard(activeTab);
         });
     }
-
-    // Password Visibility Toggles
-    document.querySelectorAll('.password-toggle').forEach(toggle => {
-        toggle.addEventListener('click', () => {
-            const targetId = toggle.dataset.target;
-            const input = document.getElementById(targetId);
-            if (!input) return;
-
-            if (input.type === 'password') {
-                input.type = 'text';
-                toggle.classList.remove('fa-eye-slash');
-                toggle.classList.add('fa-eye');
-            } else {
-                input.type = 'password';
-                toggle.classList.remove('fa-eye');
-                toggle.classList.add('fa-eye-slash');
-            }
-        });
-    });
 }
 
 // --- View Management ---
@@ -267,11 +240,6 @@ function switchView(viewName) {
     views[viewName].classList.remove('hidden-view');
     // small timeout to allow display:block to apply before animating opacity
     setTimeout(() => views[viewName].classList.add('active-view'), 50);
-
-    // Persist view
-    if (viewName !== 'login' && viewName !== 'register') {
-        localStorage.setItem('currentView', viewName);
-    }
 }
 
 function openModal(modalEl) {
