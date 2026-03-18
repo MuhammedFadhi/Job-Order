@@ -16,11 +16,15 @@ async function generateWorkOrderID() {
     return `WIP-${nextNum.toString().padStart(4, '0')}`;
 }
 
-// GET all work orders
+// GET all work orders with joined data
 router.get('/', async (req, res) => {
     const { data, error } = await supabase
         .from('work_orders')
-        .select('*')
+        .select(`
+            *,
+            user:users!user_id(id, name, role),
+            job_order:job_orders!ref_id_jo(id, title, customer_name)
+        `)
         .order('created_at', { ascending: false });
 
     if (error) return res.status(500).json({ error: error.message });

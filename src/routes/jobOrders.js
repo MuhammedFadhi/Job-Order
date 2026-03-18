@@ -16,28 +16,48 @@ async function generateJobOrderID() {
     return `JB-${nextNum.toString().padStart(4, '0')}`;
 }
 
+// Helper: attach user objects to work_orders by user_id
+async function attachUsersToWorkOrders(jobOrders) {
+    const { data: users } = await supabase.from('users').select('id, name, username');
+    const userMap = {};
+    if (users) users.forEach(u => { userMap[u.id] = u; });
+
+    const list = Array.isArray(jobOrders) ? jobOrders : [jobOrders];
+    list.forEach(job => {
+        if (job.work_orders) {
+            job.work_orders = job.work_orders.map(wo => ({
+                ...wo,
+                user: userMap[wo.user_id] || null
+            }));
+        }
+    });
+    return Array.isArray(jobOrders) ? list : list[0];
+}
+
 // GET all job orders
 router.get('/', async (req, res) => {
     const { data, error } = await supabase
         .from('job_orders')
-        .select('*, assigned_by:users!job_orders_assigned_by_fkey(name), assigned_to:users!job_orders_assigned_to_fkey(name)')
+        .select('*, assigned_by_user:users!job_orders_assigned_by_fkey(name), assigned_to_user:users!job_orders_assigned_to_fkey(name), work_orders(*)')
         .order('created_at', { ascending: false });
 
     if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
+    const result = await attachUsersToWorkOrders(data);
+    res.json(result);
 });
 
 // GET single job order
 router.get('/:id', async (req, res) => {
     const { data, error } = await supabase
         .from('job_orders')
-        .select('*, assigned_by:users!job_orders_assigned_by_fkey(name), assigned_to:users!job_orders_assigned_to_fkey(name), work_orders(*)')
+        .select('*, assigned_by_user:users!job_orders_assigned_by_fkey(name), assigned_to_user:users!job_orders_assigned_to_fkey(name), work_orders(*)')
         .eq('id', req.params.id)
         .single();
 
     if (error) return res.status(500).json({ error: error.message });
     if (!data) return res.status(404).json({ error: 'Job order not found' });
-    res.json(data);
+    const result = await attachUsersToWorkOrders(data);
+    res.json(result);
 });
 
 // POST new job order

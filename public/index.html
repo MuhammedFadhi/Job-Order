@@ -20,7 +20,7 @@
     <div id="app" class="app-container">
         
         <!-- 1. Login View -->
-        <main id="login-view" class="view active-view">
+        <main id="login-view" class="view">
             <div class="glass-card login-card auth-card">
                 <h2>Welcome Back</h2>
                 <p>Enter your credentials to access the system.</p>
@@ -40,7 +40,38 @@
                     </button>
                     
                     <div class="auth-footer">
-                        <a href="#">Forgot password?</a>
+                        <a href="#" id="link-to-register">Don't have an account? Sign up</a>
+                    </div>
+                </form>
+            </div>
+        </main>
+
+        <!-- 1.5. Register View -->
+        <main id="register-view" class="view hidden-view">
+            <div class="glass-card login-card auth-card">
+                <h2>Create Account</h2>
+                <p>Sign up to get started.</p>
+                
+                <form id="register-form" class="auth-form">
+                    <div class="form-group floating-label">
+                        <input type="text" id="reg-name" required placeholder=" " autocomplete="name">
+                        <label for="reg-name">Full Name</label>
+                    </div>
+                    <div class="form-group floating-label">
+                        <input type="text" id="reg-username" required placeholder=" " autocomplete="off">
+                        <label for="reg-username">Username</label>
+                    </div>
+                    <div class="form-group floating-label">
+                        <input type="password" id="reg-password" required placeholder=" ">
+                        <label for="reg-password">Password</label>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-block btn-auth" id="btn-submit-reg">
+                        Sign Up <i class="fa-solid fa-user-plus"></i>
+                    </button>
+                    
+                    <div class="auth-footer">
+                        <a href="#" id="link-to-login">Already have an account? Sign in</a>
                     </div>
                 </form>
             </div>
@@ -50,19 +81,48 @@
         <main id="dashboard-view" class="view hidden-view">
             <!-- Top Navigation -->
             <header class="dashboard-header">
-                <div></div> <!-- Empty div to push user profile to the right -->
-                
-                <div class="user-profile">
-                    <div class="avatar" id="current-user-avatar">?</div>
-                    <div class="user-details">
-                        <span id="current-user-name">User Name</span>
-                        <span id="current-user-role" class="badge role-badge">Role</span>
+                <div class="header-main">
+                    <div id="active-work-stopwatch" class="stopwatch-container hidden">
+                        <div class="stopwatch-indicator">
+                            <div class="pulse-dot"></div>
+                            <span class="active-label">Active:</span>
+                        </div>
+                        <div class="stopwatch-info">
+                            <span id="stopwatch-job" class="mono">JB-XXXX</span>
+                            <span class="divider">/</span>
+                            <span id="stopwatch-wo" class="mono">WO-XXXX</span>
+                            <span id="stopwatch-desc" class="desc-text">Description</span>
+                        </div>
+                        <div class="stopwatch-controls">
+                            <button id="btn-pause-stopwatch" class="btn-pause" title="Pause/Resume">
+                                <i class="fa-solid fa-pause"></i>
+                            </button>
+                            <div class="stopwatch-timer-wrap">
+                                <span id="stopwatch-time" class="time-display">00:00:00</span>
+                            </div>
+                        </div>
                     </div>
-                    <button class="btn btn-icon btn-glass" id="btn-logout" title="Logout">
-                        <i class="fa-solid fa-right-from-bracket"></i>
-                    </button>
+                    
+                    <div class="user-profile-nav">
+                        <div class="user-info">
+                            <div class="avatar-sm" id="current-user-avatar">?</div>
+                            <div class="user-meta">
+                                <span id="current-user-name">User Name</span>
+                                <span id="current-user-role" class="role-tag">Role</span>
+                            </div>
+                        </div>
+                        <div class="admin-nav hidden" id="admin-nav-link">
+                            <button class="btn-nav-item" id="btn-goto-admin" title="Admin Dashboard">
+                                <i class="fa-solid fa-gauge-high"></i>
+                                <span>Admin</span>
+                            </button>
+                        </div>
+                        <button class="btn-logout" id="btn-logout" title="Logout">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
                 </div>
-            </nav>
+            </header>
 
             <div class="dashboard-content">
                 <header class="section-header">
@@ -75,9 +135,69 @@
                     </button>
                 </header>
 
-                <!-- Job Orders Grid -->
-                <div id="job-orders-container" class="grid-container">
+                <!-- Active Jobs -->
+                <div class="section-header small" style="margin-top: 1rem; margin-bottom: 1rem;">
+                    <h3>Active Jobs</h3>
+                </div>
+                <div id="active-job-orders-container" class="grid-container" style="margin-bottom: 2rem;">
                     <div class="line-loader w-full"></div>
+                </div>
+
+                <!-- Completed Jobs -->
+                <div class="section-header small" style="margin-bottom: 1rem;">
+                    <h3>Completed Jobs</h3>
+                </div>
+                <div id="completed-job-orders-container" class="grid-container">
+                </div>
+            </div>
+        </main>
+
+        <!-- 2.5 Admin View -->
+        <main id="admin-view" class="view hidden-view">
+            <header class="dashboard-header">
+                <div class="header-main">
+                    <div class="header-text">
+                        <h1>Admin Dashboard</h1>
+                        <p>Monitor all work orders and system activity.</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-outline" id="btn-back-to-jobs">
+                            <i class="fa-solid fa-arrow-left"></i> Back to Jobs
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="dashboard-content">
+                <!-- Tab Navigation -->
+                <div class="admin-tabs-container">
+                    <div class="admin-tabs" id="admin-tabs">
+                        <button class="tab-btn active" data-tab="all">All Orders</button>
+                        <button class="tab-btn" data-tab="ongoing">In Progress</button>
+                        <button class="tab-btn" data-tab="completed">Completed</button>
+                        <button class="tab-btn" data-tab="jobs">Job Summaries</button>
+                    </div>
+                    <div class="tab-stats">
+                        <span id="admin-stat-count">0 Orders</span>
+                    </div>
+                </div>
+
+                <!-- Admin Work Orders List -->
+                <div class="admin-work-orders-container">
+                    <div class="admin-list-header">
+                        <div class="col-id">ID</div>
+                        <div class="col-info">Work Details</div>
+                        <div class="col-user">User</div>
+                        <div class="col-job">Job Order</div>
+                        <div class="col-time">Time Lapsed</div>
+                        <div class="col-status">Status</div>
+                    </div>
+                    <div id="admin-work-orders-list" class="admin-list-content">
+                        <div class="line-loader w-full"></div>
+                    </div>
+                    <!-- Job Summaries List (Aggregated) -->
+                    <div id="admin-job-summaries-list" class="admin-list-content hidden">
+                    </div>
                 </div>
             </div>
         </main>
@@ -139,7 +259,12 @@
                         <span id="jd-id" class="badge">JB-XXXX</span>
                         <span id="jd-status" class="badge status-open">Open</span>
                     </div>
-                    <button class="btn btn-icon btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <button class="btn btn-outline btn-sm" id="btn-edit-job" title="Edit Job Order">
+                            <i class="fa-solid fa-pen-to-square"></i> Edit
+                        </button>
+                        <button class="btn btn-icon btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
                 </div>
                 
                 <div class="job-meta-grid">
@@ -193,6 +318,74 @@
                     <button type="button" class="btn btn-outline btn-close-modal">Close</button>
                     <button type="button" class="btn btn-success" id="btn-close-job">Mark Job Complete</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- 5. Edit Job Order Modal -->
+        <div id="edit-job-modal" class="modal-overlay hidden">
+            <div class="glass-card modal-content">
+                <div class="modal-header">
+                    <h2>Edit Job Order</h2>
+                    <button class="btn btn-icon btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <form id="edit-job-form">
+                    <input type="hidden" id="ej-id">
+                    <div class="form-group">
+                        <label>Title</label>
+                        <input type="text" id="ej-title" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Customer Name</label>
+                        <input type="text" id="ej-customer" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Priority</label>
+                            <select id="ej-priority">
+                                <option value="1">1 - Low</option>
+                                <option value="2">2</option>
+                                <option value="3">3 - Medium</option>
+                                <option value="4">4</option>
+                                <option value="5">5 - Critical</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Assigned To</label>
+                            <select id="ej-assigned">
+                                <!-- Populated by JS -->
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Description (Optional)</label>
+                        <textarea id="ej-desc" rows="3"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-close-modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 6. Edit Work Order Modal -->
+        <div id="edit-work-modal" class="modal-overlay hidden">
+            <div class="glass-card modal-content">
+                <div class="modal-header">
+                    <h2>Edit Work Order</h2>
+                    <button class="btn btn-icon btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <form id="edit-work-form">
+                    <input type="hidden" id="ew-id">
+                    <div class="form-group">
+                        <label>Description</label>
+                        <input type="text" id="ew-desc" required>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-close-modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
             </div>
         </div>
 

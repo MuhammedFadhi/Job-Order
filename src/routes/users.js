@@ -2,15 +2,25 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../supabaseClient');
 
-// GET all users
+// GET all users (only properly registered users with a username, no duplicates)
 router.get('/', async (req, res) => {
     const { data, error } = await supabase
         .from('users')
         .select('*')
-        .order('created_at', { ascending: false });
+        .not('username', 'is', null)
+        .order('created_at', { ascending: true }); // oldest first so we keep the original
 
     if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
+
+    // Deduplicate by username - keep the first (oldest) entry
+    const seen = new Set();
+    const unique = data.filter(user => {
+        if (seen.has(user.username)) return false;
+        seen.add(user.username);
+        return true;
+    });
+
+    res.json(unique);
 });
 
 // GET single user
