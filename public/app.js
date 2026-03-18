@@ -16,12 +16,14 @@ let serverOffset = 0;
 async function syncServerTime() {
     try {
         const start = Date.now();
-        const res = await fetch(`${API_BASE}/time`);
+        // Add cache-busting query parameter
+        const res = await fetch(`${API_BASE}/time?t=${start}`);
         const { time: serverTime } = await res.json();
         const end = Date.now();
         // serverOffset = average server time - average client time
         const rtt = end - start;
         serverOffset = serverTime - (start + rtt / 2);
+        console.log(`[Clock Sync] Server Time: ${new Date(serverTime).toLocaleTimeString()}`);
         console.log(`[Clock Sync] Server Offset: ${serverOffset}ms (RTT: ${rtt}ms)`);
     } catch (err) {
         console.error('Failed to sync server time:', err);
@@ -67,8 +69,16 @@ async function initApp() {
             document.getElementById('current-user-name').textContent = currentUser.name;
             document.getElementById('current-user-role').textContent = currentUser.role;
             document.getElementById('current-user-avatar').textContent = currentUser.name.charAt(0);
-            switchView('dashboard');
-            loadDashboard();
+            const savedView = localStorage.getItem('currentView') || 'dashboard';
+            
+            // Switch to the saved view
+            if (savedView === 'admin' && currentUser.role === 'Admin') {
+                switchView('admin');
+                loadAdminDashboard();
+            } else {
+                switchView('dashboard');
+                loadDashboard();
+            }
             
             // Show Admin Nav if user is Admin
             if (currentUser && currentUser.role === 'Admin') {
@@ -201,6 +211,31 @@ function setupEventListeners() {
             }
         });
     }
+
+    const adminDateFilter = document.getElementById('admin-date-filter');
+    const adminDatePickerGroup = document.getElementById('admin-date-picker-group');
+    if (adminDateFilter && adminDatePickerGroup) {
+        adminDatePickerGroup.addEventListener('click', () => {
+            try {
+                if (typeof adminDateFilter.showPicker === 'function') {
+                    adminDateFilter.showPicker();
+                } else {
+                    adminDateFilter.focus();
+                    adminDateFilter.click();
+                }
+            } catch (err) {
+                adminDateFilter.focus();
+                adminDateFilter.click();
+            }
+        });
+
+        adminDateFilter.addEventListener('change', (e) => {
+            // Stop propagation to prevent re-opening on selection in some browsers
+            e.stopPropagation();
+            const activeTab = document.querySelector('.admin-tabs .tab-btn.active')?.dataset.tab || 'all';
+            loadAdminDashboard(activeTab);
+        });
+    }
 }
 
 // --- View Management ---
@@ -213,6 +248,11 @@ function switchView(viewName) {
     views[viewName].classList.remove('hidden-view');
     // small timeout to allow display:block to apply before animating opacity
     setTimeout(() => views[viewName].classList.add('active-view'), 50);
+
+    // Persist view
+    if (viewName !== 'login' && viewName !== 'register') {
+        localStorage.setItem('currentView', viewName);
+    }
 }
 
 function openModal(modalEl) {
@@ -1150,6 +1190,13 @@ async function loadAdminDashboard(filter = 'all') {
         const res = await fetch(`${API_BASE}/work-orders`);
         let workOrders = await res.json();
         
+        // Apply Date Filter if set
+        const dateFilter = document.getElementById('admin-date-filter').value;
+        if (dateFilter) {
+            const filterDate = new Date(dateFilter).toDateString();
+            workOrders = workOrders.filter(wo => new Date(wo.time_in).toDateString() === filterDate);
+        }
+
         // Filter based on tab
         if (filter === 'jobs') {
             document.getElementById('admin-work-orders-list').classList.add('hidden');
@@ -1225,6 +1272,7 @@ function renderAdminWorkOrders(workOrders) {
         container.appendChild(row);
     });
 }
+
 
 function calculateAdminTimeLapsed(wo) {
     // If it has a pause history, use the calcWorkedTime logic

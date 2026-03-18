@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
+const path = require('path');       
 const supabase = require('./supabaseClient');
 
 const app = express();
@@ -15,7 +15,7 @@ app.use(cors());
 app.use(express.json());
 
 // Serve static files from the 'public' directory
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, '../public'))); 
 
 // Routes
 app.use('/api/job-orders', jobOrdersRouter);
@@ -25,6 +25,9 @@ app.use('/api/auth', authRouter);
 
 // Clock Sync Endpoint
 app.get('/api/time', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.json({ time: Date.now() });
 });
 

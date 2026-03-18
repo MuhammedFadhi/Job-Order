@@ -1326,7 +1326,81 @@ input:focus, select:focus, textarea:focus {
 }
 
 .job-info-main .job-id-link {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'JetBrains Mono', monospace;/* Admin Date Filter & Grouping */
+.admin-filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.date-picker-wrapper {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: all 0.3s ease;
+}
+
+.date-picker-wrapper:focus-within {
+    border-color: var(--accent-primary);
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 0 15px var(--accent-glow);
+}
+
+.date-picker-wrapper i {
+    color: var(--accent-primary);
+    font-size: 1rem;
+}
+
+.admin-date-input {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.9rem;
+    outline: none;
+    cursor: pointer;
+}
+
+/* Custom Calendar Icon (Webkit) */
+.admin-date-input::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.5;
+    cursor: pointer;
+}
+
+.admin-date-input::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+/* Date Group Header */
+.date-group-section {
+    margin-bottom: 2rem;
+}
+
+.date-group-header {
+    margin: 1.5rem 1.5rem 0.75rem 1.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 3px solid var(--accent-primary);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.date-group-header i {
+    color: var(--accent-primary);
+    font-size: 0.9rem;
+}
     font-size: 0.8rem;
     color: var(--accent-primary);
     background: var(--accent-glow);
