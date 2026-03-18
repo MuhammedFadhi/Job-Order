@@ -23,6 +23,11 @@ app.use('/api/users', usersRouter);
 app.use('/api/work-orders', workOrdersRouter);
 app.use('/api/auth', authRouter);
 
+// Clock Sync Endpoint
+app.get('/api/time', (req, res) => {
+    res.json({ time: Date.now() });
+});
+
 // Root route - Serve premium landing page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));

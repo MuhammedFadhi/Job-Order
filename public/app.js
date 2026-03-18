@@ -10,6 +10,28 @@ let allUsers = [];
 // API Configuration
 const API_BASE = '/api';
 
+// Clock Sync
+let serverOffset = 0;
+    
+async function syncServerTime() {
+    try {
+        const start = Date.now();
+        const res = await fetch(`${API_BASE}/time`);
+        const { time: serverTime } = await res.json();
+        const end = Date.now();
+        // serverOffset = average server time - average client time
+        const rtt = end - start;
+        serverOffset = serverTime - (start + rtt / 2);
+        console.log(`[Clock Sync] Server Offset: ${serverOffset}ms (RTT: ${rtt}ms)`);
+    } catch (err) {
+        console.error('Failed to sync server time:', err);
+    }
+}
+
+function getServerNow() {
+    return Date.now() + serverOffset;
+}
+
 // DOM Elements
 const views = {
     login: document.getElementById('login-view'),
@@ -33,6 +55,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function initApp() {
+    // 0. Synchronize time with server
+    await syncServerTime();
+
     // 1. Restore session from localStorage if available (ASAP)
     const savedUser = localStorage.getItem('currentUser');
     if (savedUser) {
@@ -609,11 +634,11 @@ function calcWorkedTime(woId, timeIn, timeOut) {
         if (woState.accumulatedTime) {
             let total = woState.accumulatedTime;
             if (!woState.isPaused && woState.lastResumedAt) {
-                total += Date.now() - woState.lastResumedAt;
+                total += getServerNow() - woState.lastResumedAt;
             }
             return Math.max(0, total);
         }
-        return Math.max(0, Date.now() - new Date(timeIn).getTime());
+        return Math.max(0, getServerNow() - new Date(timeIn).getTime());
     }
     
     let totalWorked = 0;
@@ -643,7 +668,7 @@ function calcWorkedTime(woId, timeIn, timeOut) {
     
     // If it hasn't ended and is still running, add time from last event until now
     if (isCurrentlyRunning && !timeOut) {
-        totalWorked += (Date.now() - lastEventTime);
+        totalWorked += (getServerNow() - lastEventTime);
     }
     
     return totalWorked;
@@ -834,7 +859,7 @@ window.completeWorkOrder = async function(workOrderId) {
             const pauseState = getPauseState();
             const woState = pauseState[workOrderId] || { accumulatedTime: 0, isPaused: false, lastResumedAt: null, history: [] };
             if (!woState.history) woState.history = [];
-            const now = Date.now();
+            const now = getServerNow();
             // If it was running, accumulate final segment
             if (!woState.isPaused && woState.lastResumedAt) {
                 woState.accumulatedTime += (now - woState.lastResumedAt);
@@ -860,7 +885,7 @@ window.toggleWorkOrderPause = function(workOrderId, currentStatus) {
     const pauseState = getPauseState();
     const woState = pauseState[workOrderId] || { accumulatedTime: 0, isPaused: false, lastResumedAt: null, history: [] };
     if (!woState.history) woState.history = [];
-    const now = Date.now();
+    const now = getServerNow();
     const isPaused = woState.isPaused || currentStatus === 'paused';
 
     if (isPaused) {
@@ -1018,7 +1043,7 @@ function startStopwatch(jobId, woId, woDesc, timeInDateString) {
             return;
         }
         
-        const now = Date.now();
+        const now = getServerNow();
         // Calculate total elapsed excluding any time spent paused (this assumes serverStartTime is the total start, but since we didn't store all intervals, we simplify by just using the accumulatedTime + diff from last unpause. If there was no pause, it's just now - serverStartTime)
         // A better approach for purely client-side pause:
         // accumulatedTime = total time we were running.
@@ -1050,7 +1075,7 @@ function togglePauseStopwatch() {
     const pauseState = getPauseState();
     const woState = pauseState[currentActiveWorkOrderId] || { accumulatedTime: 0, isPaused: false, lastResumedAt: null, history: [] };
     if (!woState.history) woState.history = [];
-    const now = Date.now();
+    const now = getServerNow();
     const btnPause = document.getElementById('btn-pause-stopwatch');
 
     if (woState.isPaused) {
