@@ -1514,9 +1514,153 @@ input:focus, select:focus, textarea:focus {
     to { transform: translateX(120%); opacity: 0; }
 }
 
-/* Responsive */
+/* =========== RESPONSIVE DESIGN =========== */
+@media (max-width: 992px) {
+    .grid-container {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+    
+    .job-summary-card {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
 @media (max-width: 768px) {
-    .section-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
-    .job-meta-grid { grid-template-columns: 1fr; gap: 1rem; }
-    .form-row { grid-template-columns: 1fr; gap: 0; }
+    .view {
+        padding: 1rem;
+    }
+    
+    .dashboard-header {
+        padding: 0.5rem 1rem;
+        margin: -1rem -1rem 1.5rem -1rem;
+    }
+    
+    .header-main {
+        flex-direction: column-reverse;
+        align-items: stretch;
+        gap: 1rem;
+    }
+    
+    .user-profile-nav {
+        justify-content: space-between;
+    }
+    
+    .stopwatch-container {
+        width: 100%;
+        justify-content: space-between;
+        padding: 0.5rem 1rem;
+    }
+    
+    .desc-text {
+        max-width: 120px;
+    }
+    
+    .section-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+    
+    .section-header h1 {
+        font-size: 1.8rem;
+    }
+    
+    .grid-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .modal-content {
+        max-width: 95%;
+        padding: 1.5rem;
+        margin: 1rem;
+    }
+    
+    .modal-header h2 {
+        font-size: 1.4rem;
+    }
+    
+    .job-meta-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+        padding: 1rem;
+    }
+    
+    .form-row {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+    
+    /* Admin Mobile Layout */
+    .admin-tabs-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .admin-filter-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+    
+    .admin-list-header {
+        display: none;
+    }
+    
+    .admin-list-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+        padding: 1.5rem;
+    }
+    
+    .col-id, .col-user, .col-job, .col-time, .col-status {
+        width: 100%;
+        text-align: left;
+    }
+    
+    .col-status {
+        display: flex;
+        justify-content: flex-start;
+        margin-top: 0.5rem;
+    }
+    
+    .job-summary-card {
+        grid-template-columns: 1fr;
+        margin: 1rem;
+        gap: 1.5rem;
+    }
+    
+    .job-stats-summary {
+        border: none;
+        padding: 1rem 0;
+        border-top: 1px solid var(--border-glass);
+        border-bottom: 1px solid var(--border-glass);
+    }
+}
+
+@media (max-width: 480px) {
+    .stopwatch-info .divider, .active-label {
+        display: none;
+    }
+    
+    .stopwatch-info {
+        gap: 0.4rem;
+    }
+    
+    .desc-text {
+        max-width: 80px;
+    }
+    
+    .stopwatch-timer-wrap {
+        min-width: 75px;
+        padding: 0.2rem 0.5rem;
+    }
+    
+    .time-display {
+        font-size: 0.8rem;
+    }
+    
+    .btn {
+        padding: 0.7rem 1.25rem;
+    }
 }
