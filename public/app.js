@@ -463,7 +463,7 @@ function createJobCard(job) {
         // Aggregate total hours by each user for this job
         const userStatsMap = {};
         job.work_orders.forEach(wo => {
-            const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out);
+            const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history);
             const uId = wo.user_id;
             const uName = wo.user ? wo.user.name : 'Unknown';
             if (!userStatsMap[uId]) {
@@ -1043,7 +1043,7 @@ function updateStopwatchState(activeJobs) {
     if (activeUserWorkOrder) {
         currentActiveWorkOrderId = activeUserWorkOrder.id;
         currentActiveJobId = associatedJobId;
-        startStopwatch(associatedJobId, activeUserWorkOrder.id, activeUserWorkOrder.description, activeUserWorkOrder.time_in);
+        startStopwatch(associatedJobId, activeUserWorkOrder.id, activeUserWorkOrder.description, activeUserWorkOrder.time_in, activeUserWorkOrder.pause_history);
     } else {
         currentActiveWorkOrderId = null;
         currentActiveJobId = null;
@@ -1051,7 +1051,7 @@ function updateStopwatchState(activeJobs) {
     }
 }
 
-function startStopwatch(jobId, woId, woDesc, timeInDateString) {
+function startStopwatch(jobId, woId, woDesc, timeInDateString, serverHistory) {
     if (stopwatchInterval) clearInterval(stopwatchInterval);
     
     const container = document.getElementById('active-work-stopwatch');
@@ -1068,7 +1068,19 @@ function startStopwatch(jobId, woId, woDesc, timeInDateString) {
     
     const serverStartTime = new Date(timeInDateString).getTime();
     const pauseState = getPauseState();
-    const woState = pauseState[woId] || { accumulatedTime: 0, isPaused: false, lastPausedAt: null };
+    let woState = pauseState[woId] || { accumulatedTime: 0, isPaused: false, lastPausedAt: null, history: [] };
+    
+    // Merge or replace with server history if available
+    if (serverHistory && serverHistory.length > 0) {
+        woState.history = serverHistory;
+        // Derive isPaused from the most recent event
+        const lastEvent = serverHistory[serverHistory.length - 1];
+        if (lastEvent.type === 'pause') {
+            woState.isPaused = true;
+        } else if (lastEvent.type === 'resume' || lastEvent.type === 'end') {
+            woState.isPaused = false;
+        }
+    }
     
     if (btnPause) {
         btnPause.innerHTML = woState.isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
@@ -1089,18 +1101,7 @@ function startStopwatch(jobId, woId, woDesc, timeInDateString) {
             return;
         }
         
-        const now = getServerNow();
-        // Calculate total elapsed excluding any time spent paused (this assumes serverStartTime is the total start, but since we didn't store all intervals, we simplify by just using the accumulatedTime + diff from last unpause. If there was no pause, it's just now - serverStartTime)
-        // A better approach for purely client-side pause:
-        // accumulatedTime = total time we were running.
-        // lastResumedAt = time we last pressed play.
-        let elapsed = woState.accumulatedTime;
-        if (woState.lastResumedAt) {
-            elapsed += (now - woState.lastResumedAt);
-        } else {
-            // First time running without interruptions
-            elapsed = Math.max(0, now - serverStartTime);
-        }
+        const elapsed = calcWorkedTime(woId, timeInDateString, null, serverHistory);
         renderTime(elapsed);
     }
     
