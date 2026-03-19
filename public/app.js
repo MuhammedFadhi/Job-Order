@@ -131,6 +131,17 @@ function setupEventListeners() {
         });
     }
 
+    // Password Visibility Toggle
+    const toggleAuthPass = document.getElementById('toggle-auth-password');
+    if (toggleAuthPass) {
+        toggleAuthPass.addEventListener('click', () => togglePasswordVisibility('auth-password', 'toggle-auth-password'));
+    }
+
+    const toggleRegPass = document.getElementById('toggle-reg-password');
+    if (toggleRegPass) {
+        toggleRegPass.addEventListener('click', () => togglePasswordVisibility('reg-password', 'toggle-reg-password'));
+    }
+
     // Modals
     document.getElementById('btn-new-job').addEventListener('click', () => {
         populateUserDropdown('nj-assigned');
@@ -240,6 +251,22 @@ function switchView(viewName) {
     views[viewName].classList.remove('hidden-view');
     // small timeout to allow display:block to apply before animating opacity
     setTimeout(() => views[viewName].classList.add('active-view'), 50);
+}
+
+function togglePasswordVisibility(inputId, iconId) {
+    const input = document.getElementById(inputId);
+    const icon = document.getElementById(iconId);
+    if (input && icon) {
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    }
 }
 
 function openModal(modalEl) {

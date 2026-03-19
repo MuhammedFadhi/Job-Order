@@ -348,8 +348,8 @@ input:focus, select:focus, textarea:focus {
 
 /* =========== SPECIFIC VIEWS =========== */
 
-/* 1. Login View */
-#login-view {
+/* 1. Login & Register View */
+#login-view, #register-view {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -412,6 +412,28 @@ input:focus, select:focus, textarea:focus {
     top: 1rem;
     font-size: 0.75rem;
     color: #818cf8;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 1.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color 0.2s;
+    z-index: 10;
+    font-size: 1.1rem;
+    padding: 0.5rem; /* Increase touch area */
+}
+
+.password-toggle:hover {
+    color: #818cf8;
+}
+
+.floating-label input[type="password"],
+.floating-label input[type="text"].password-input {
+    padding-right: 3.5rem;
 }
 
 .floating-label input:focus {
