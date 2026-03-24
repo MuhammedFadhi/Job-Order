@@ -836,8 +836,7 @@ input:focus, select:focus, textarea:focus {
     background-image: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.05) 0%, transparent 50%);
     padding: 2.5rem;
     max-height: 85vh;
-    overflow-y: overlay; /* Allows scrollbar to float over content in some browsers */
-    padding: 2.5rem;
+    overflow-y: auto;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-glass);
@@ -854,7 +853,16 @@ input:focus, select:focus, textarea:focus {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 2.5rem;
+    position: sticky;
+    top: -2.5rem; /* Matches parent padding */
+    z-index: 50;
+    margin: -2.5rem -2.5rem 2.5rem -2.5rem;
+    padding: 2.5rem 2.5rem 1.5rem 2.5rem;
+    background: var(--bg-panel);
+    background-image: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.05) 0%, transparent 50%);
+    border-bottom: 1px solid var(--border-glass);
+    border-top-left-radius: var(--radius-lg);
+    border-top-right-radius: var(--radius-lg);
 }
 
 .modal-header h2 {
@@ -1017,7 +1025,6 @@ input:focus, select:focus, textarea:focus {
     background: var(--accent-glow);
     padding: 0.2rem 0.6rem;
     border-radius: 4px;
-    margin-top: 0.5rem;
     font-weight: 600;
 }
 

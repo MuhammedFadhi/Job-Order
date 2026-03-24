@@ -676,6 +676,18 @@ function formatDuration(ms) {
     return `${s}s`;
 }
 
+// --- Helper: format date to DD/MM/YYYY ---
+function formatDateDDMMYYYY(date) {
+    if (!date) return 'N/A';
+    const d = (date instanceof Date) ? date : new Date(date);
+    if (isNaN(d.getTime())) return 'N/A';
+    
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+}
+
 // --- Helper: calculate total worked time from history ---
 function calcWorkedTime(woId, timeIn, timeOut, serverHistory) {
     const localPauseState = getPauseState();
@@ -802,7 +814,9 @@ function renderWorkOrders(workOrders) {
         if (isCompleted) { badgeClass = 'status-completed'; badgeLabel = 'COMPLETED'; }
         else if (isPaused) { badgeClass = 'status-paused'; badgeLabel = 'PAUSED'; }
 
-        const timeIn = new Date(wo.time_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const startDate = new Date(wo.time_in);
+        const workDate = formatDateDDMMYYYY(startDate);
+        const timeIn = startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         const timeOut = wo.time_out
             ? new Date(wo.time_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
             : (isPaused ? 'Paused' : 'Ongoing');
@@ -821,11 +835,11 @@ function renderWorkOrders(workOrders) {
             <div class="work-item-top">
                 <div class="work-info">
                     <span class="work-desc">${wo.description}</span>
-                    <span class="work-meta">${wo.id} | ${timeIn} &rarr; ${timeOut}</span>
+                    <span class="work-meta">${wo.id} | ${workDate} | ${timeIn} &rarr; ${timeOut}</span>
                     <span class="work-hours"><i class="fa-regular fa-clock"></i> Worked: <strong>${workedStr}</strong></span>
-                    <span class="work-user"><i class="fa-solid fa-user"></i> ${wo.user ? wo.user.name : (currentUser ? currentUser.name : 'Unknown User')}</span>
                 </div>
                 <div class="work-item-actions">
+                    <span class="work-user"><i class="fa-solid fa-user"></i> ${wo.user ? wo.user.name : (currentUser ? currentUser.name : 'Unknown User')}</span>
                     <span class="badge ${badgeClass}">${badgeLabel}</span>
                     <button class="btn btn-icon btn-sm" onclick="openEditWorkModal('${wo.id}', '${wo.description.replace(/'/g, "\\'")}')" title="Edit Description">
                         <i class="fa-solid fa-pen"></i>
@@ -1237,8 +1251,8 @@ async function loadAdminDashboard(filter = 'all') {
         // Apply Date Filter if set
         const dateFilter = document.getElementById('admin-date-filter').value;
         if (dateFilter) {
-            const filterDate = new Date(dateFilter).toDateString();
-            workOrders = workOrders.filter(wo => new Date(wo.time_in).toDateString() === filterDate);
+            const filterDate = formatDateDDMMYYYY(dateFilter);
+            workOrders = workOrders.filter(wo => formatDateDDMMYYYY(wo.time_in) === filterDate);
         }
 
         // Filter based on tab
@@ -1291,7 +1305,7 @@ function renderAdminWorkOrders(workOrders) {
             <div class="col-id">${wo.id}</div>
             <div class="col-info">
                 <span class="admin-desc">${wo.description || 'No description'}</span>
-                <span class="admin-meta">Started ${new Date(wo.time_in).toLocaleString()}</span>
+                <span class="admin-meta">Started ${formatDateDDMMYYYY(wo.time_in)} ${new Date(wo.time_in).toLocaleTimeString()}</span>
             </div>
             <div class="col-user">
                 <div class="admin-user-info">
