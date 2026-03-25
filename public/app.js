@@ -688,23 +688,63 @@ function formatDateDDMMYYYY(date) {
     return `${day}/${month}/${year}`;
 }
 
+// --- Helper: derive isPaused from work order data ---
+function isWorkOrderPaused(wo) {
+    if (!wo) return false;
+    if (wo.status === 'completed') return false;
+    
+    // Check local state for potential optimistic updates
+    const localPauseState = getPauseState();
+    const woState = localPauseState[wo.id];
+    const localHistory = (woState && woState.history) ? woState.history : [];
+    const serverHistory = wo.pause_history || [];
+    
+    // Pick the best history
+    let history = serverHistory;
+    if (localHistory.length > serverHistory.length) {
+        history = localHistory;
+    } else if (localHistory.length === serverHistory.length && localHistory.length > 0) {
+        const lastServer = serverHistory[serverHistory.length - 1];
+        const lastLocal = localHistory[localHistory.length - 1];
+        if (lastLocal.at > lastServer.at) history = localHistory;
+    }
+
+    if (history.length > 0) {
+        const lastEvent = history[history.length - 1];
+        return lastEvent.type === 'pause';
+    }
+    
+    // Fallback to status
+    return wo.status === 'paused';
+}
+
 // --- Helper: calculate total worked time from history ---
 function calcWorkedTime(woId, timeIn, timeOut, serverHistory) {
     const localPauseState = getPauseState();
     const woState = localPauseState[woId] || {};
-    // Use server history if provided, otherwise fallback to local
-    const history = (serverHistory && serverHistory.length > 0) ? serverHistory : (woState.history || []);
+    const localHistory = woState.history || [];
+    
+    // Choose the best history: prioritized by length and last event timestamp
+    let history = [];
+    if (!serverHistory || serverHistory.length === 0) {
+        history = localHistory;
+    } else if (localHistory.length === 0) {
+        history = serverHistory;
+    } else {
+        // Both exist - compare them
+        const lastServer = serverHistory[serverHistory.length - 1];
+        const lastLocal = localHistory[localHistory.length - 1];
+        
+        if (serverHistory.length > localHistory.length || (serverHistory.length === localHistory.length && lastServer.at > lastLocal.at)) {
+            history = serverHistory;
+        } else {
+            history = localHistory;
+        }
+    }
     
     // Fallback for simple calculation if no history exists (legacy or direct API data)
     if (history.length === 0) {
         if (timeOut) return Math.max(0, new Date(timeOut).getTime() - new Date(timeIn).getTime());
-        if (woState.accumulatedTime) {
-            let total = woState.accumulatedTime;
-            if (!woState.isPaused && woState.lastResumedAt) {
-                total += getServerNow() - woState.lastResumedAt;
-            }
-            return Math.max(0, total);
-        }
         return Math.max(0, getServerNow() - new Date(timeIn).getTime());
     }
     
@@ -802,8 +842,7 @@ function renderWorkOrders(workOrders) {
 
     workOrders.forEach(wo => {
         const isCompleted = wo.status === 'completed';
-        const localWoState = localPauseState[wo.id] || {};
-        const isPaused = !isCompleted && !!localWoState.isPaused;
+        const isPaused = isWorkOrderPaused(wo);
         const isActive = !isCompleted && !isPaused;
 
         const item = document.createElement('div');
@@ -957,14 +996,16 @@ window.completeWorkOrder = async function(workOrderId) {
     }
 }
 
-window.toggleWorkOrderPause = function(workOrderId, currentStatus) {
+window.toggleWorkOrderPause = async function(workOrderId, currentStatus) {
     const pauseState = getPauseState();
     const woState = pauseState[workOrderId] || { accumulatedTime: 0, isPaused: false, lastResumedAt: null, history: [] };
     if (!woState.history) woState.history = [];
     const now = getServerNow();
-    const isPaused = woState.isPaused || currentStatus === 'paused';
+    
+    // Rely on local state for toggling
+    const isCurrentlyPaused = !!woState.isPaused;
 
-    if (isPaused) {
+    if (isCurrentlyPaused) {
         // Resuming
         woState.isPaused = false;
         woState.lastResumedAt = now;
@@ -984,19 +1025,22 @@ window.toggleWorkOrderPause = function(workOrderId, currentStatus) {
     pauseState[workOrderId] = woState;
     savePauseState(pauseState);
 
-    // Sync to server
-    fetch(`${API_BASE}/work-orders/${workOrderId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            // Also update status in DB if needed (optional but good for consistency)
-            status: woState.isPaused ? 'paused' : 'started',
-            pause_history: woState.history 
-        })
-    }).catch(err => console.error('Failed to sync pause state:', err));
+    // Sync to server and AWAIT it
+    try {
+        await fetch(`${API_BASE}/work-orders/${workOrderId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                status: woState.isPaused ? 'paused' : 'started',
+                pause_history: woState.history 
+            })
+        });
+    } catch (err) {
+        console.error('Failed to sync pause state:', err);
+    }
 
-    if (currentJobOrder) openJobDetail(currentJobOrder.id);
-    if (typeof loadDashboard === 'function') loadDashboard();
+    if (currentJobOrder) await openJobDetail(currentJobOrder.id);
+    if (typeof loadDashboard === 'function') await loadDashboard();
 }
 
 async function handleCloseJobOrder() {
@@ -1093,7 +1137,13 @@ function updateStopwatchState(activeJobs) {
 }
 
 function startStopwatch(jobId, woId, woDesc, timeInDateString, serverHistory) {
-    if (stopwatchInterval) clearInterval(stopwatchInterval);
+    // If same WO is already active and not paused, don't hard reset everything (prevent flickering)
+    const isSameWO = currentActiveWorkOrderId === woId;
+    
+    if (stopwatchInterval && !isSameWO) {
+        clearInterval(stopwatchInterval);
+        stopwatchInterval = null;
+    }
     
     const container = document.getElementById('active-work-stopwatch');
     const jobSpan = document.getElementById('stopwatch-job');
@@ -1109,20 +1159,50 @@ function startStopwatch(jobId, woId, woDesc, timeInDateString, serverHistory) {
     
     const serverStartTime = new Date(timeInDateString).getTime();
     const pauseState = getPauseState();
-    let woState = pauseState[woId] || { accumulatedTime: 0, isPaused: false, lastPausedAt: null, history: [] };
+    let woState = pauseState[woId] || { accumulatedTime: 0, isPaused: false, lastResumedAt: null, history: [] };
     
-    // Merge or replace with server history if available
+    // Smart merge history: prioritized by length and last event timestamp
+    const localHistory = woState.history || [];
+    let bestHistory = localHistory;
+
     if (serverHistory && serverHistory.length > 0) {
-        woState.history = serverHistory;
-        // Derive isPaused from the most recent event
-        const lastEvent = serverHistory[serverHistory.length - 1];
-        if (lastEvent.type === 'pause') {
-            woState.isPaused = true;
-        } else if (lastEvent.type === 'resume' || lastEvent.type === 'end') {
-            woState.isPaused = false;
+        if (serverHistory.length > localHistory.length) {
+            bestHistory = serverHistory;
+        } else if (serverHistory.length === localHistory.length && localHistory.length > 0) {
+            const lastServer = serverHistory[serverHistory.length - 1];
+            const lastLocal = localHistory[localHistory.length - 1];
+            if (lastServer.at > lastLocal.at) {
+                bestHistory = serverHistory;
+            }
         }
     }
     
+    woState.history = bestHistory;
+
+    // Derived properties from bestHistory
+    if (bestHistory.length > 0) {
+        const lastEvent = bestHistory[bestHistory.length - 1];
+        if (lastEvent.type === 'pause') {
+            woState.isPaused = true;
+            woState.lastResumedAt = null;
+        } else if (lastEvent.type === 'resume') {
+            woState.isPaused = false;
+            woState.lastResumedAt = lastEvent.at;
+        } else if (lastEvent.type === 'end') {
+            woState.isPaused = false;
+            woState.lastResumedAt = null;
+        }
+    } else {
+        // No history, use start time as last resume time
+        if (!woState.isPaused && !woState.lastResumedAt) {
+            woState.lastResumedAt = serverStartTime;
+        }
+    }
+    
+    // Save to ensure local consistency
+    pauseState[woId] = woState;
+    savePauseState(pauseState);
+
     if (btnPause) {
         btnPause.innerHTML = woState.isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
     }
@@ -1136,28 +1216,33 @@ function startStopwatch(jobId, woId, woDesc, timeInDateString, serverHistory) {
     }
 
     function update() {
-        if (woState.isPaused) {
-            // Display static accumulated time if paused
-            renderTime(woState.accumulatedTime);
-            return;
-        }
+        // FRESH reading from localStorage to avoid closure staleness
+        const latestPauseState = getPauseState();
+        const latestWoState = latestPauseState[woId] || woState;
         
-        const elapsed = calcWorkedTime(woId, timeInDateString, null, serverHistory);
+        // Calculate based on latest history for total accuracy
+        const elapsed = calcWorkedTime(woId, timeInDateString, null, latestWoState.history);
         renderTime(elapsed);
-    }
-    
-    // Initialize lastResumedAt if we're not paused and haven't recorded a resume time
-    if (!woState.isPaused && !woState.lastResumedAt) {
-        woState.lastResumedAt = serverStartTime;
-        pauseState[woId] = woState;
-        savePauseState(pauseState);
+        
+        // Update button state if it somehow got out of sync
+        if (btnPause) {
+            const currentUIisPaused = btnPause.querySelector('.fa-play') !== null;
+            if (currentUIisPaused !== latestWoState.isPaused) {
+                btnPause.innerHTML = latestWoState.isPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+            }
+        }
     }
 
-    update();
-    stopwatchInterval = setInterval(update, 1000);
+    if (!stopwatchInterval) {
+        update();
+        stopwatchInterval = setInterval(update, 1000);
+    } else {
+        // Just force one update if it's already running
+        update();
+    }
 }
 
-function togglePauseStopwatch() {
+async function togglePauseStopwatch() {
     if (!currentActiveWorkOrderId) return;
 
     const pauseState = getPauseState();
@@ -1188,18 +1273,22 @@ function togglePauseStopwatch() {
     pauseState[currentActiveWorkOrderId] = woState;
     savePauseState(pauseState);
 
-    // Sync to server
-    fetch(`${API_BASE}/work-orders/${currentActiveWorkOrderId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            status: woState.isPaused ? 'paused' : 'started',
-            pause_history: woState.history 
-        })
-    }).catch(err => console.error('Failed to sync pause state:', err));
+    // Sync to server and AWAIT it
+    try {
+        await fetch(`${API_BASE}/work-orders/${currentActiveWorkOrderId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                status: woState.isPaused ? 'paused' : 'started',
+                pause_history: woState.history 
+            })
+        });
+    } catch (err) {
+        console.error('Failed to sync pause state:', err);
+    }
 
     // Refresh dashboard cards to reflect paused indicator
-    if (typeof loadDashboard === 'function') loadDashboard();
+    if (typeof loadDashboard === 'function') await loadDashboard();
 }
 
 function stopStopwatch() {

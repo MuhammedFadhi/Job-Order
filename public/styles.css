@@ -1331,31 +1331,54 @@ input:focus, select:focus, textarea:focus {
 /* Utilities */
 /* Job Summary Specific Styles */
 .job-summary-card {
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: var(--radius-lg);
     border: 1px solid var(--border-glass);
-    padding: 1.5rem;
-    margin: 1rem 1.5rem;
+    padding: 2rem;
+    margin: 1.25rem 1.5rem;
     display: grid;
-    grid-template-columns: 1.5fr 1fr 2fr;
-    gap: 2rem;
-    transition: var(--transition);
+    grid-template-columns: 1.8fr 1.2fr 2.5fr;
+    gap: 2.5rem;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.job-summary-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
 }
 
 .job-summary-card:hover {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: var(--border-strong);
-    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-4px) scale(1.005);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
 }
 
 .job-info-main h3 {
-    font-size: 1.1rem;
-    margin-bottom: 0.5rem;
+    font-size: 1.35rem;
+    margin: 0.75rem 0 0.4rem 0;
     color: var(--text-primary);
+    letter-spacing: -0.01em;
 }
 
 .job-info-main .job-id-link {
-    font-family: 'JetBrains Mono', monospace;/* Admin Date Filter & Grouping */
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--accent-primary);
+    background: var(--accent-glow);
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+    font-weight: 600;
+    display: inline-block;
+}
+
+/* Admin Date Filter & Grouping */
 .admin-filter-controls {
     display: flex;
     align-items: center;
@@ -1430,12 +1453,7 @@ input:focus, select:focus, textarea:focus {
     color: var(--accent-primary);
     font-size: 0.9rem;
 }
-    font-size: 0.8rem;
-    color: var(--accent-primary);
-    background: var(--accent-glow);
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-}
+
 
 .job-stats-summary {
     display: flex;
@@ -1467,41 +1485,67 @@ input:focus, select:focus, textarea:focus {
 .job-user-breakdown {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.85rem;
 }
 
 .user-breakdown-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.85rem;
-    padding: 0.4rem 0.75rem;
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 6px;
+    font-size: 0.9rem;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    transition: all 0.3s ease;
+}
+
+.user-breakdown-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateX(6px);
 }
 
 .user-meta {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 1rem;
+    min-width: 0; /* Allow text truncate if needed */
+}
+
+.user-meta span {
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .user-breakdown-avatar {
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
-    background: var(--accent-primary);
+    background: linear-gradient(135deg, var(--accent-primary), #818cf8);
     color: white;
-    font-size: 0.7rem;
+    font-size: 0.8rem;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 700;
+    box-shadow: 0 4px 10px rgba(99, 102, 241, 0.3);
+    flex-shrink: 0;
 }
 
 .user-breakdown-time {
-    font-weight: 600;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
     color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    min-width: 80px;
+    text-align: right;
 }
 
 .hidden {

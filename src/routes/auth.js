@@ -39,8 +39,8 @@ router.post('/register', async (req, req_res) => { // Use res as req_res inside 
             .select();
 
         if (error) {
-            console.error(error);
-            return req_res.status(500).json({ error: 'Database error' });
+            console.error('Registration Error:', error);
+            return req_res.status(500).json({ error: error.message || 'Database error' });
         }
 
         req_res.status(201).json({
@@ -93,8 +93,8 @@ router.post('/login', async (req, res) => {
             user: userProfile
         });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Server error during login' });
+        console.error('Login Server Error:', err);
+        res.status(500).json({ error: err.message || 'Server error during login' });
     }
 });
 
