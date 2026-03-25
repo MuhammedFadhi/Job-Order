@@ -457,7 +457,7 @@ function createJobCard(job) {
             <span><i class="fa-solid fa-flag"></i> P${job.priority || 3}</span>
         </div>
         <div class="job-card-meta">
-            <span><i class="fa-regular fa-user"></i> ${job.assigned_to_user ? capitalizeName(job.assigned_to_user.name) : 'Unassigned'}</span>
+            <span><i class="fa-regular fa-user"></i> ${job.assigned_to_user ? job.assigned_to_user.name : 'Unassigned'}</span>
         </div>
     `;
 
@@ -472,8 +472,9 @@ function createJobCard(job) {
                 const timeIn = new Date(wo.time_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 const userName = wo.user ? wo.user.name : 'Unknown';
                 const initials = userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-                // Read pause state from localStorage (backend status stays 'started' while paused)
-                const isPaused = !!(localPauseState[wo.id] && localPauseState[wo.id].isPaused);
+                
+                // Use helper to determine pause state consistently across browsers
+                const isPaused = isWorkOrderPaused(wo);
                 const dotClass = isPaused ? 'pulse-dot-paused' : 'pulse-dot';
                 const statusText = isPaused ? `Work paused` : `Work started at ${timeIn}`;
                 
@@ -490,7 +491,7 @@ function createJobCard(job) {
         // Aggregate total hours by each user for this job
         const userStatsMap = {};
         job.work_orders.forEach(wo => {
-            const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history);
+            const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, wo.user_id, wo.status);
             const uId = wo.user_id;
             const uName = wo.user ? wo.user.name : 'Unknown';
             if (!userStatsMap[uId]) {
@@ -693,58 +694,74 @@ function isWorkOrderPaused(wo) {
     if (!wo) return false;
     if (wo.status === 'completed') return false;
     
-    // Check local state for potential optimistic updates
+    // Check local state for potential optimistic updates ONLY if we are the user who owns this WO
     const localPauseState = getPauseState();
     const woState = localPauseState[wo.id];
+    
+    // Determine which history is more reliable
     const localHistory = (woState && woState.history) ? woState.history : [];
     const serverHistory = wo.pause_history || [];
     
-    // Pick the best history
     let history = serverHistory;
-    if (localHistory.length > serverHistory.length) {
+    
+    // If we have local history that is more "advanced" (longer), trust it (optimistic UI)
+    // Only if the current user is the owner of the work order
+    const isOwner = currentUser && (wo.user_id === currentUser.id || (wo.user && wo.user.id === currentUser.id));
+    
+    if (isOwner && localHistory.length > serverHistory.length) {
         history = localHistory;
-    } else if (localHistory.length === serverHistory.length && localHistory.length > 0) {
+    } else if (isOwner && localHistory.length === serverHistory.length && localHistory.length > 0) {
         const lastServer = serverHistory[serverHistory.length - 1];
         const lastLocal = localHistory[localHistory.length - 1];
         if (lastLocal.at > lastServer.at) history = localHistory;
     }
 
+    // Source of truth: history events
     if (history.length > 0) {
         const lastEvent = history[history.length - 1];
         return lastEvent.type === 'pause';
     }
     
-    // Fallback to status
+    // Fallback: rely on the explicit status from the server
     return wo.status === 'paused';
 }
 
 // --- Helper: calculate total worked time from history ---
-function calcWorkedTime(woId, timeIn, timeOut, serverHistory) {
+function calcWorkedTime(woId, timeIn, timeOut, serverHistory, woUserId, woStatus) {
     const localPauseState = getPauseState();
     const woState = localPauseState[woId] || {};
     const localHistory = woState.history || [];
     
-    // Choose the best history: prioritized by length and last event timestamp
+    // Determine which history is more reliable
     let history = [];
-    if (!serverHistory || serverHistory.length === 0) {
-        history = localHistory;
-    } else if (localHistory.length === 0) {
-        history = serverHistory;
-    } else {
-        // Both exist - compare them
-        const lastServer = serverHistory[serverHistory.length - 1];
-        const lastLocal = localHistory[localHistory.length - 1];
-        
-        if (serverHistory.length > localHistory.length || (serverHistory.length === localHistory.length && lastServer.at > lastLocal.at)) {
+    const isOwner = currentUser && (woUserId === currentUser.id);
+
+    if (isOwner) {
+        // For the owner, trust local history if it's more advanced (optimistic)
+        if (!serverHistory || serverHistory.length === 0) {
+            history = localHistory;
+        } else if (localHistory.length === 0) {
             history = serverHistory;
         } else {
-            history = localHistory;
+            const lastServer = serverHistory[serverHistory.length - 1];
+            const lastLocal = localHistory[localHistory.length - 1];
+            if (serverHistory.length > localHistory.length || (serverHistory.length === localHistory.length && lastServer.at > lastLocal.at)) {
+                history = serverHistory;
+            } else {
+                history = localHistory;
+            }
         }
+    } else {
+        // For non-owners (including Admins viewing others), trust ONLY the server history
+        history = serverHistory || [];
     }
     
     // Fallback for simple calculation if no history exists (legacy or direct API data)
     if (history.length === 0) {
         if (timeOut) return Math.max(0, new Date(timeOut).getTime() - new Date(timeIn).getTime());
+        // CRITICAL FIX: If status is paused on server, but we have no history, 
+        // DO NOT assume it's running. Return 0 for current segment.
+        if (woStatus === 'paused') return 0; 
         return Math.max(0, getServerNow() - new Date(timeIn).getTime());
     }
     
@@ -861,10 +878,9 @@ function renderWorkOrders(workOrders) {
             : (isPaused ? 'Paused' : 'Ongoing');
 
         // Calculate actual worked time
-        const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history);
-        const workedStr = formatDuration(workedMs);
-
         const woUserId = wo.user_id || (wo.user ? wo.user.id : null);
+        const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, woUserId, wo.status);
+        const workedStr = formatDuration(workedMs);
         const canAct = currentUser && (woUserId === currentUser.id);
 
         // Build timeline
@@ -1221,9 +1237,8 @@ function startStopwatch(jobId, woId, woDesc, timeInDateString, serverHistory) {
         const latestWoState = latestPauseState[woId] || woState;
         
         // Calculate based on latest history for total accuracy
-        const elapsed = calcWorkedTime(woId, timeInDateString, null, latestWoState.history);
+        const elapsed = calcWorkedTime(woId, timeInDateString, null, latestWoState.history, currentUser ? currentUser.id : null, latestWoState.isPaused ? 'paused' : 'started');
         renderTime(elapsed);
-        
         // Update button state if it somehow got out of sync
         if (btnPause) {
             const currentUIisPaused = btnPause.querySelector('.fa-play') !== null;
@@ -1303,13 +1318,6 @@ function stopStopwatch() {
 }
 
 // --- Utilities ---
-    
-function capitalizeName(name) {
-    if (!name) return 'Unknown User';
-    return name.split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ');
-}
 
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
@@ -1406,7 +1414,7 @@ function renderAdminWorkOrders(workOrders) {
             <div class="col-user">
                 <div class="admin-user-info">
                     <div class="admin-avatar">${userInitials}</div>
-                    <span class="admin-username">${capitalizeName(userName)}</span>
+                    <span class="admin-username">${userName}</span>
                 </div>
             </div>
             <div class="col-job">
@@ -1434,7 +1442,7 @@ function calculateAdminTimeLapsed(wo) {
     // otherwise fallback to simple duration since we don't sync all pause histories to the server (client-only feature)
     
     // Attempt to use local pause state if available (for the current admin's own work)
-    const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history);
+    const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, wo.user_id, wo.status);
     return formatDuration(workedMs);
 }
 
@@ -1468,7 +1476,7 @@ function renderAdminJobSummaries(workOrders) {
         }
         
         const job = jobsMap[jobId];
-        const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history);
+        const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, wo.user_id, wo.status);
         
         job.totalWorkedMs += workedMs;
         job.woCount += 1;
@@ -1496,7 +1504,7 @@ function renderAdminJobSummaries(workOrders) {
                 <div class="user-breakdown-item">
                     <div class="user-meta">
                         <div class="user-breakdown-avatar">${initials}</div>
-                        <span>${capitalizeName(u.name)}</span>
+                        <span>${u.name}</span>
                     </div>
                     <span class="user-breakdown-time">${formatDuration(u.timeMs)}</span>
                 </div>

@@ -30,7 +30,7 @@ CREATE TABLE job_orders (
 -- 3. Create Work Orders
 CREATE TABLE work_orders (
     id TEXT PRIMARY KEY, -- Stores 'WIP-XXXX'
-    status TEXT NOT NULL DEFAULT 'started' CHECK (status IN ('started', 'ongoing', 'completed')),
+    status TEXT NOT NULL DEFAULT 'started' CHECK (status IN ('started', 'ongoing', 'completed', 'paused')),
     time_in TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     time_out TIMESTAMP WITH TIME ZONE,
     description TEXT,
