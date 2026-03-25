@@ -457,7 +457,7 @@ function createJobCard(job) {
             <span><i class="fa-solid fa-flag"></i> P${job.priority || 3}</span>
         </div>
         <div class="job-card-meta">
-            <span><i class="fa-regular fa-user"></i> ${job.assigned_to_user ? job.assigned_to_user.name : 'Unassigned'}</span>
+            <span><i class="fa-regular fa-user"></i> ${job.assigned_to_user ? capitalizeName(job.assigned_to_user.name) : 'Unassigned'}</span>
         </div>
     `;
 
@@ -1303,6 +1303,13 @@ function stopStopwatch() {
 }
 
 // --- Utilities ---
+    
+function capitalizeName(name) {
+    if (!name) return 'Unknown User';
+    return name.split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+}
 
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
@@ -1399,7 +1406,7 @@ function renderAdminWorkOrders(workOrders) {
             <div class="col-user">
                 <div class="admin-user-info">
                     <div class="admin-avatar">${userInitials}</div>
-                    <span class="admin-username">${userName}</span>
+                    <span class="admin-username">${capitalizeName(userName)}</span>
                 </div>
             </div>
             <div class="col-job">
@@ -1489,7 +1496,7 @@ function renderAdminJobSummaries(workOrders) {
                 <div class="user-breakdown-item">
                     <div class="user-meta">
                         <div class="user-breakdown-avatar">${initials}</div>
-                        <span>${u.name}</span>
+                        <span>${capitalizeName(u.name)}</span>
                     </div>
                     <span class="user-breakdown-time">${formatDuration(u.timeMs)}</span>
                 </div>

@@ -1492,18 +1492,20 @@ input:focus, select:focus, textarea:focus {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.9rem;
-    padding: 0.75rem 1rem;
-    background: rgba(255, 255, 255, 0.025);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    transition: all 0.3s ease;
+    font-size: 0.95rem;
+    padding: 1rem 1.25rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 .user-breakdown-item:hover {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.15);
-    transform: translateX(6px);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(99, 102, 241, 0.4);
+    transform: translateX(8px) scale(1.02);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
 }
 
 .user-meta {
@@ -1514,26 +1516,31 @@ input:focus, select:focus, textarea:focus {
 }
 
 .user-meta span {
-    font-weight: 500;
+    font-weight: 600;
     color: var(--text-primary);
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .user-breakdown-avatar {
-    width: 32px;
-    height: 32px;
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--accent-primary), #818cf8);
     color: white;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 700;
-    box-shadow: 0 4px 10px rgba(99, 102, 241, 0.3);
+    font-weight: 800;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.1);
     flex-shrink: 0;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .user-breakdown-time {
