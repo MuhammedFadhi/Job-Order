@@ -128,7 +128,7 @@ async function generateDailyReports() {
 
             // Send copy to admin (as separate email per user)
             if (adminEmail && adminEmail !== report.email) {
-                await sendEmail(adminEmail, `ADMIN COPY: ${subject}`, html, attachments);
+                await sendEmail(adminEmail, ` ${subject}`, html, attachments);
             }
         }
 
@@ -185,8 +185,8 @@ function generateUserHtml(report) {
             
             <table style="width: 100%; border-collapse: collapse; margin-top: 25px; background: #fdfdff; border: 1px solid #edf0f5; border-radius: 10px;">
                 <tr>
-                    <td style="padding: 20px; font-size: 18px; font-weight: 600; color: #444;">Total Hours Today</td>
-                    <td style="padding: 20px; text-align: right; font-size: 26px; font-weight: 800; color: #6366f1;">${formatDuration(totalMs)}</td>
+                    <td style="padding: 20px; font-size: 18px; font-weight: 600; color: #000000ff;">Total Hours Today</td>
+                    <td style="padding: 20px; text-align: right; font-size: 18px; font-weight: 600; color: #000000ff;">${formatDuration(totalMs)}</td>
                 </tr>
             </table>
 

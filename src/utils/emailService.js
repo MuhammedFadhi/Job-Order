@@ -20,8 +20,9 @@ const transporter = nodemailer.createTransport({
  */
 async function sendEmail(to, subject, htmlContent, attachments = []) {
     try {
+        const fromEmail = process.env.MAIL_FROM || process.env.SMTP_USER;
         const info = await transporter.sendMail({
-            from: `"Job Order System" <${process.env.SMTP_USER}>`,
+            from: `"Job Order System" <${fromEmail}>`,
             to,
             subject,
             html: htmlContent,
