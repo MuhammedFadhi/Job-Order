@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');       
 const supabase = require('./supabaseClient');
+const cron = require('node-cron');
+const { generateDailyReports } = require('./utils/reportService');
 
 const app = express();
 const jobOrdersRouter = require('./routes/jobOrders');
@@ -34,6 +36,22 @@ app.get('/api/time', (req, res) => {
 // Root route - Serve premium landing page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+// Daily Report Cron and Test API
+cron.schedule('0 18 * * *', () => {
+    console.log('Running scheduled daily report...');
+    generateDailyReports().catch(err => console.error('Cron report failed:', err));
+});
+
+app.post('/api/test-email', async (req, res) => {
+    try {
+        const result = await generateDailyReports();
+        res.json(result);
+    } catch (error) {
+        console.error('Test email failed:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Export the app for Vercel serverless functions

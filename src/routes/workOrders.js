@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
         .from('work_orders')
         .select(`
             *,
-            user:users!user_id(id, name, role),
+            user:users!user_id(id, name, role, color_code),
             job_order:job_orders!ref_id_jo(id, title, customer_name)
         `)
         .order('created_at', { ascending: false });
@@ -73,6 +73,7 @@ router.post('/', async (req, res) => {
                 description, 
                 user_id, 
                 ref_id_jo,
+                tagged_user_ids: req.body.tagged_user_ids || [],
                 time_in: new Date()
             }])
             .select();

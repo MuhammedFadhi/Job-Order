@@ -10,6 +10,7 @@ CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'User' CHECK (role IN ('User', 'Admin')),
+    color_code TEXT DEFAULT '#6366f1',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

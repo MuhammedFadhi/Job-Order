@@ -27,6 +27,10 @@ router.post('/register', async (req, req_res) => { // Use res as req_res inside 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
+        // Generate Random Premium Color
+        const brandColors = ['#6366f1', '#8b5cf6', '#d946ef', '#f43f5e', '#f97316', '#eab308', '#10b981', '#14b8a6', '#06b6d4', '#3b82f6'];
+        const randomColor = brandColors[Math.floor(Math.random() * brandColors.length)];
+
         // Insert new user
         const { data: newUser, error } = await supabase
             .from('users')
@@ -34,7 +38,8 @@ router.post('/register', async (req, req_res) => { // Use res as req_res inside 
                 name, 
                 username, 
                 password: hashedPassword,
-                role: 'User' // default role
+                role: 'User', // default role
+                color_code: randomColor
             }])
             .select();
 

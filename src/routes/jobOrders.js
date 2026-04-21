@@ -28,7 +28,7 @@ async function generateJobOrderID() {
 
 // Helper: attach user objects to work_orders by user_id
 async function attachUsersToWorkOrders(jobOrders) {
-    const { data: users } = await supabase.from('users').select('id, name, username');
+    const { data: users } = await supabase.from('users').select('id, name, username, color_code');
     const userMap = {};
     if (users) users.forEach(u => { userMap[u.id] = u; });
 

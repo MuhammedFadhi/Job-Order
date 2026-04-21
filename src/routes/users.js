@@ -53,4 +53,18 @@ router.post('/', async (req, res) => {
     res.status(201).json(data[0]);
 });
 
+// PUT update user (e.g. for color_code)
+router.put('/:id', async (req, res) => {
+    const { color_code } = req.body;
+    const { data, error } = await supabase
+        .from('users')
+        .update({ color_code })
+        .eq('id', req.params.id)
+        .select();
+
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data.length) return res.status(404).json({ error: 'User not found' });
+    res.json(data[0]);
+});
+
 module.exports = router;
