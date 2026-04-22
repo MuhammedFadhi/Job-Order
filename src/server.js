@@ -50,7 +50,7 @@ app.get('/api/cron/daily-reports', async (req, res) => {
     }
 });
 
-cron.schedule('10 15 * * *', () => {
+cron.schedule('15 18 * * *', () => {
     console.log('Running scheduled daily report (local node-cron)...');
     generateDailyReports().catch(err => console.error('Cron report failed:', err));
 });
