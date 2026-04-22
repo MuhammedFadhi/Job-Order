@@ -114,7 +114,8 @@ async function generateDailyReports() {
         });
 
         // 5. Send individual reports to users and admin
-        const adminEmail = process.env.ADMIN_EMAIL;
+        const adminEmail = (process.env.ADMIN_EMAIL || '').trim();
+        console.log(`Target Admin Email: "${adminEmail}"`);
         
         for (const userId in userReports) {
             const report = userReports[userId];
@@ -123,11 +124,13 @@ async function generateDailyReports() {
 
             // Send to user
             if (report.email && report.email.includes('@')) {
+                console.log(`Sending report to user: ${report.email}`);
                 await sendEmail(report.email, subject, html, attachments);
             }
 
             // Send copy to admin (as separate email per user)
             if (adminEmail && adminEmail !== report.email) {
+                console.log(`Sending copy to admin: ${adminEmail}`);
                 await sendEmail(adminEmail, ` ${subject}`, html, attachments);
             }
         }

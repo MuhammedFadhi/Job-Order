@@ -1,5 +1,11 @@
 {
   "version": 2,
+  "crons": [
+    {
+      "path": "/api/cron/daily-reports",
+      "schedule": "35 8 * * *"
+    }
+  ],
   "builds": [
     {
       "src": "src/server.js",

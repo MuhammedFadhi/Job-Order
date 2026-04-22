@@ -39,8 +39,19 @@ app.get('/', (req, res) => {
 });
 
 // Daily Report Cron and Test API
-cron.schedule('20 10 * * *', () => {
-    console.log('Running scheduled daily report...');
+app.get('/api/cron/daily-reports', async (req, res) => {
+    try {
+        console.log('Vercel Cron triggered: Generating daily reports...');
+        const result = await generateDailyReports();
+        res.json({ success: true, result });
+    } catch (error) {
+        console.error('Vercel Cron failed:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+cron.schedule('35 11 * * *', () => {
+    console.log('Running scheduled daily report (local node-cron)...');
     generateDailyReports().catch(err => console.error('Cron report failed:', err));
 });
 
