@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/cron/daily-reports",
-      "schedule": "0 15 * * *"
+      "schedule": "10 15 * * *"
     }
   ],
   "builds": [
