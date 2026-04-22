@@ -39,7 +39,7 @@ app.get('/', (req, res) => {
 });
 
 // Daily Report Cron and Test API
-cron.schedule('50 9 * * *', () => {
+cron.schedule('20 10 * * *', () => {
     console.log('Running scheduled daily report...');
     generateDailyReports().catch(err => console.error('Cron report failed:', err));
 });
