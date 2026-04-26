@@ -1798,6 +1798,12 @@ function showToast(message, type = 'success') {
     }, 3000);
 }
 
+function truncateText(text, limit = 15) {
+    if (!text) return '';
+    if (text.length <= limit) return text;
+    return text.substring(0, limit) + '...';
+}
+
 // --- Admin Dashboard Functions ---
 
 async function loadAdminDashboard(filter = 'all') {
@@ -1916,7 +1922,8 @@ async function populateAdminJobFilter() {
         jobs.forEach(job => {
             const opt = document.createElement('option');
             opt.value = job.id;
-            opt.textContent = `${job.id} - ${job.title}`;
+            const shortTitle = truncateText(job.title, 15);
+            opt.textContent = `${job.id} - ${shortTitle}`;
             filter.appendChild(opt);
         });
         
@@ -2124,14 +2131,25 @@ async function handlePrintJobBrief(jobId) {
             const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, wo.user_id, wo.status);
             totalMs += workedMs;
             
-            const userName = wo.assigned_to_user ? wo.assigned_to_user.name : (wo.user ? wo.user.name : 'Unknown');
-            if (!userTotals[userName]) userTotals[userName] = 0;
-            userTotals[userName] += workedMs;
+            const leadName = wo.assigned_to_user ? wo.assigned_to_user.name : (wo.user ? wo.user.name : 'Unknown');
+            if (!userTotals[leadName]) userTotals[leadName] = 0;
+            userTotals[leadName] += workedMs;
+
+            // Get tagged names for the admin view
+            const taggedIds = Array.isArray(wo.tagged_user_ids) ? wo.tagged_user_ids : [];
+            const taggedNames = taggedIds.map(id => {
+                const u = allUsers.find(user => user.id === id);
+                return u ? u.name : null;
+            }).filter(Boolean);
+
+            const taggedHTML = taggedNames.length > 0 
+                ? `<br><small style="color: #6366f1; font-weight: normal;">+ ${taggedNames.join(', ')}</small>` 
+                : '';
             
             return `
                 <tr>
                     <td>${wo.id}</td>
-                    <td><strong>${userName}</strong></td>
+                    <td><strong>${leadName}</strong>${taggedHTML}</td>
                     <td style="max-width: 300px;">${wo.description || 'N/A'}</td>
                     <td>${formatDateDDMMYYYY(wo.time_in)}<br><small>${new Date(wo.time_in).toLocaleTimeString()}</small></td>
                     <td>${formatDuration(workedMs)}</td>
@@ -2225,8 +2243,9 @@ async function handlePrintDailyReport() {
         const todayStr = new Date().toDateString();
         const myTodayWO = allWO.filter(wo => {
             const isMe = wo.user_id === currentUser.id;
+            const isTagged = Array.isArray(wo.tagged_user_ids) && wo.tagged_user_ids.includes(currentUser.id);
             const isToday = new Date(wo.time_in).toDateString() === todayStr;
-            return isMe && isToday;
+            return (isMe || isTagged) && isToday;
         });
 
         if (myTodayWO.length === 0) {
@@ -2239,10 +2258,25 @@ async function handlePrintDailyReport() {
             const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, wo.user_id, wo.status);
             totalMs += workedMs;
             
+            const leadName = wo.user?.name || 'Unknown';
+            const taggedIds = Array.isArray(wo.tagged_user_ids) ? wo.tagged_user_ids : [];
+            const taggedNames = taggedIds.map(id => {
+                const u = allUsers.find(user => user.id === id);
+                return u ? u.name : null;
+            }).filter(Boolean);
+
+            const isTagged = Array.isArray(wo.tagged_user_ids) && wo.tagged_user_ids.includes(currentUser.id);
+            let participantLabel = '';
+            if (isTagged) {
+                participantLabel = `<br><small style="color: var(--accent-primary); background: rgba(99,102,241,0.1); padding: 1px 4px; border-radius: 3px;">Lead: ${leadName}</small>`;
+            } else if (taggedNames.length > 0) {
+                participantLabel = `<br><small style="color: var(--accent-primary); background: rgba(99,102,241,0.1); padding: 1px 4px; border-radius: 3px;">Tagged: ${taggedNames.join(', ')}</small>`;
+            }
+            
             return `
                 <tr>
                     <td>${wo.id}</td>
-                    <td><strong>${wo.ref_id_jo}</strong></td>
+                    <td><strong>${wo.ref_id_jo}</strong>${participantLabel}</td>
                     <td style="max-width: 300px;">${wo.description || 'N/A'}</td>
                     <td>${new Date(wo.time_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                     <td>${formatDuration(workedMs)}</td>
@@ -2441,7 +2475,8 @@ async function populateMyWorkJobFilter() {
         jobs.forEach(job => {
             const opt = document.createElement('option');
             opt.value = job.id;
-            opt.textContent = `${job.id} - ${job.title}`;
+            const shortTitle = truncateText(job.title, 15);
+            opt.textContent = `${job.id} - ${shortTitle}`;
             filter.appendChild(opt);
         });
         

@@ -24,6 +24,11 @@ function calculateDuration(timeIn, timeOut, pauseHistory) {
                 lastPauseAt = null;
             }
         });
+        
+        // If still paused at the time of calculation, subtract the ongoing pause duration
+        if (lastPauseAt) {
+            totalPauseTime += (end - lastPauseAt);
+        }
     }
 
     const duration = (end - start) - totalPauseTime;
@@ -79,12 +84,44 @@ async function generateDailyReports() {
 
         if (adminError) throw adminError;
 
+        const adminEmail = (process.env.ADMIN_EMAIL || '').trim();
+
         if (!workOrders || workOrders.length === 0) {
-            console.log('No work orders found for today. Skipping reports.');
+            console.log('No work orders found for today. Sending "No Activity" report to admin...');
+            
+            if (adminEmail) {
+                const noActivityHtml = generateNoActivityHtml();
+                const subject = `Daily Work Summary - No Activity - ${new Date().toLocaleDateString()}`;
+                
+                // Prepare logo attachment
+                const logoPath = path.join(__dirname, '../../public/assets/a360b.png');
+                const attachments = [];
+                if (fs.existsSync(logoPath)) {
+                    attachments.push({
+                        filename: 'a360b.png',
+                        path: logoPath,
+                        cid: 'a360logo'
+                    });
+                }
+                
+                await sendEmail(adminEmail, subject, noActivityHtml, attachments);
+                return { success: true, message: 'No work orders found. Admin notified of no activity.' };
+            }
+            
             return { success: true, message: 'No work orders for today.' };
         }
 
-        // 4. Group work orders by user
+        // 4. Fetch all users for lookup (names and emails of tagged users)
+        const { data: allUsers, error: usersError } = await supabase
+            .from('users')
+            .select('id, name, username');
+        
+        if (usersError) throw usersError;
+
+        const userMap = {};
+        allUsers.forEach(u => { userMap[u.id] = u; });
+
+        // 5. Group work orders by user (Lead or Tagged)
         const userReports = {};
         
         // Prepare logo attachment for CID embedding
@@ -99,22 +136,47 @@ async function generateDailyReports() {
         }
 
         workOrders.forEach(order => {
-            const userId = order.user_id;
-            const userName = order.users?.name || 'Unknown User';
-            const userEmail = order.users?.username;
+            const leadId = order.user_id;
+            const taggedIds = Array.isArray(order.tagged_user_ids) ? order.tagged_user_ids : [];
+            
+            const leadName = userMap[leadId]?.name || 'Unknown';
+            const taggedNames = taggedIds.map(id => userMap[id]?.name).filter(Boolean);
 
-            if (!userReports[userId]) {
-                userReports[userId] = {
-                    name: userName,
-                    email: userEmail,
-                    orders: []
-                };
+            // Add to Lead's report
+            if (leadId && userMap[leadId]) {
+                const user = userMap[leadId];
+                if (!userReports[leadId]) {
+                    userReports[leadId] = { name: user.name, email: user.username, orders: [] };
+                }
+                userReports[leadId].orders.push({ 
+                    ...order, 
+                    _isTagged: false,
+                    _leadName: leadName,
+                    _taggedNames: taggedNames
+                });
             }
-            userReports[userId].orders.push(order);
+
+            // Add to Tagged users' reports
+            taggedIds.forEach(tId => {
+                if (tId && userMap[tId]) {
+                    const user = userMap[tId];
+                    if (!userReports[tId]) {
+                        userReports[tId] = { name: user.name, email: user.username, orders: [] };
+                    }
+                    // Avoid duplicates if user is both lead and tagged
+                    if (!userReports[tId].orders.find(o => o.id === order.id)) {
+                        userReports[tId].orders.push({ 
+                            ...order, 
+                            _isTagged: true,
+                            _leadName: leadName,
+                            _taggedNames: taggedNames
+                        });
+                    }
+                }
+            });
         });
 
         // 5. Send individual reports to users and admin
-        const adminEmail = (process.env.ADMIN_EMAIL || '').trim();
         console.log(`Target Admin Email: "${adminEmail}"`);
         
         for (const userId in userReports) {
@@ -148,7 +210,14 @@ function generateUserHtml(report) {
     const rows = report.orders.map(o => `
         <tr>
             <td style="padding: 12px 10px; border-bottom: 1px solid #eee; font-size: 14px;">${o.id}</td>
-            <td style="padding: 12px 10px; border-bottom: 1px solid #eee; font-size: 14px; font-weight: 500;">${o.job_orders?.title || 'N/A'}</td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #eee; font-size: 14px; font-weight: 500;">
+                ${o.job_orders?.title || 'N/A'}
+                ${o._isTagged 
+                    ? `<br><span style="font-size: 11px; color: #6366f1; background: #f0f1ff; padding: 1px 6px; border-radius: 4px; font-weight: normal;">Lead: ${o._leadName}</span>` 
+                    : (o._taggedNames && o._taggedNames.length > 0 
+                        ? `<br><span style="font-size: 11px; color: #6366f1; background: #f0f1ff; padding: 1px 6px; border-radius: 4px; font-weight: normal;">Tagged: ${o._taggedNames.join(', ')}</span>` 
+                        : '')}
+            </td>
             <td style="padding: 12px 10px; border-bottom: 1px solid #eee; font-size: 14px; color: #666;">${o.description || 'No description'}</td>
             <td style="padding: 12px 10px; border-bottom: 1px solid #eee; font-size: 13px;">
                 <span style="padding: 2px 8px; background: #f0f0f0; border-radius: 4px; color: #555;">${o.status}</span>
@@ -201,4 +270,37 @@ function generateUserHtml(report) {
     `;
 }
 
-module.exports = { generateDailyReports };
+function generateNoActivityHtml() {
+    return `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #eef0f2; border-radius: 12px; padding: 30px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+            <!-- Header Table -->
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+                <tr>
+                    <td style="vertical-align: top;">
+                        <h2 style="color: #6366f1; margin: 0; font-size: 24px;">Daily Summary</h2>
+                        <p style="margin: 8px 0 0; color: #666; font-size: 15px;">Status report for today:</p>
+                        <p style="margin: 4px 0 0; color: #111; font-weight: bold; font-size: 15px;">${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    </td>
+                    <td style="vertical-align: top; text-align: right;">
+                        <img src="cid:a360logo" alt="a360" style="height: 45px; width: auto;">
+                    </td>
+                </tr>
+            </table>
+
+            <div style="padding: 40px 20px; text-align: center; background: #f8f9fb; border-radius: 8px; border: 1px dashed #cbd5e1; margin-bottom: 25px;">
+                <p style="font-size: 16px; color: #64748b; margin: 0;">No work orders were logged for today.</p>
+            </div>
+            
+            <div style="margin-top: 35px; padding-top: 20px; border-top: 1px solid #eee; text-align: center;">
+                <p style="font-size: 13px; color: #999; margin: 0;">This is an automated report from the Job Order System.</p>
+                <p style="font-size: 12px; color: #bbb; margin: 5px 0 0;">&copy; ${new Date().getFullYear()} a360. All rights reserved.</p>
+            </div>
+        </div>
+    `;
+}
+
+module.exports = { 
+    generateDailyReports,
+    calculateDuration,
+    formatDuration 
+};
