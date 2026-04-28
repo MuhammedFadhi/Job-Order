@@ -8,6 +8,7 @@ let currentJobOrder = null;
 let allUsers = [];
 let joViewMode = localStorage.getItem('joViewMode') || 'grid';
 let joSearchQuery = '';
+let allCustomers = [];
 
 // API Configuration
 const API_BASE = '/api';
@@ -99,7 +100,20 @@ async function initApp() {
         const res = await fetch(`${API_BASE}/users`);
         allUsers = await res.json();
     } catch (err) {
-        showToast('Error loading users for dropdowns.', 'error');
+        console.error('Failed to load users:', err);
+    }
+
+    // 3. Fetch Customers in background
+    await loadCustomers();
+}
+
+async function loadCustomers() {
+    try {
+        const res = await fetch(`${API_BASE}/customers`);
+        allCustomers = await res.json();
+        populateCustomerSelects();
+    } catch (err) {
+        console.error('Failed to load customers:', err);
     }
 }
 
@@ -298,12 +312,18 @@ function setupEventListeners() {
     if (adminTabs) {
         adminTabs.addEventListener('click', (e) => {
             if (e.target.classList.contains('tab-btn')) {
-                document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('#admin-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
                 e.target.classList.add('active');
-                const filter = e.target.dataset.tab;
-                loadAdminDashboard(filter);
+                const tab = e.target.dataset.tab;
+                loadAdminDashboard(tab);
             }
         });
+    }
+
+    // Customer Management
+    const addCustomerForm = document.getElementById('add-customer-form');
+    if (addCustomerForm) {
+        addCustomerForm.addEventListener('submit', handleAddCustomer);
     }
 
     const adminDateFilter = document.getElementById('admin-date-filter');
@@ -469,6 +489,17 @@ function switchView(viewName) {
         view.classList.remove('active-view');
         view.classList.add('hidden-view');
     });
+    
+    // Handle Global Header visibility
+    const mainHeader = document.getElementById('main-nav-header');
+    if (mainHeader) {
+        if (viewName === 'login' || viewName === 'register') {
+            mainHeader.classList.add('hidden-view');
+        } else {
+            mainHeader.classList.remove('hidden-view');
+        }
+    }
+
     views[viewName].classList.remove('hidden-view');
     // small timeout to allow display:block to apply before animating opacity
     setTimeout(() => views[viewName].classList.add('active-view'), 50);
@@ -1865,14 +1896,22 @@ async function loadAdminDashboard(filter = 'all') {
         if (filter === 'jobs') {
             document.getElementById('admin-work-orders-list').classList.add('hidden');
             document.getElementById('admin-job-summaries-list').classList.remove('hidden');
+            document.getElementById('admin-customers-section').classList.add('hidden');
             renderAdminJobSummaries(workOrders);
+            return;
+        } else if (filter === 'customers') {
+            document.getElementById('admin-work-orders-list').classList.add('hidden');
+            document.getElementById('admin-job-summaries-list').classList.add('hidden');
+            document.getElementById('admin-customers-section').classList.remove('hidden');
+            renderCustomers();
             return;
         } else {
             document.getElementById('admin-work-orders-list').classList.remove('hidden');
             document.getElementById('admin-job-summaries-list').classList.add('hidden');
+            document.getElementById('admin-customers-section').classList.add('hidden');
         }
         
-        statCount.textContent = `${workOrders.length} ${workOrders.length === 1 ? 'Order' : 'Orders'}`;
+        statCount.textContent = `${workOrders.length} ${workOrders.length === 1 ? 'Work Order' : 'Work Orders'}`;
         renderAdminWorkOrders(workOrders);
         
     } catch (err) {
@@ -2016,6 +2055,107 @@ function calculateAdminTimeLapsed(wo) {
     return formatDuration(workedMs);
 }
 
+// --- Customer Management Functions ---
+
+function populateCustomerSelects() {
+    const njSelect = document.getElementById('nj-customer');
+    const ejSelect = document.getElementById('ej-customer');
+    
+    [njSelect, ejSelect].forEach(select => {
+        if (!select) return;
+        
+        // Preserve first "Select a customer..." option if it exists
+        const firstOpt = select.options[0]?.value === "" ? select.options[0] : null;
+        select.innerHTML = '';
+        if (firstOpt) select.appendChild(firstOpt);
+        
+        allCustomers.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            select.appendChild(opt);
+        });
+    });
+}
+
+function renderCustomers() {
+    const container = document.getElementById('admin-customers-list');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (allCustomers.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center p-4">No customers added yet.</p>';
+        return;
+    }
+    
+    allCustomers.forEach(c => {
+        const row = document.createElement('div');
+        row.className = 'admin-list-row';
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        
+        row.innerHTML = `
+            <div style="flex: 2; font-weight: 500;">${c.name}</div>
+            <div style="flex: 1; font-size: 0.85rem; color: #999;">${formatDateDDMMYYYY(c.created_at)}</div>
+            <div style="width: 100px;">
+                <button class="btn btn-outline btn-sm text-error" onclick="deleteCustomer('${c.id}', '${c.name}')">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+async function handleAddCustomer(e) {
+    e.preventDefault();
+    const nameInput = document.getElementById('new-customer-name');
+    const name = nameInput.value.trim();
+    
+    if (!name) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/customers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        
+        if (res.ok) {
+            showToast(`Customer "${name}" added successfully.`, 'success');
+            nameInput.value = '';
+            await loadCustomers();
+            renderCustomers();
+        } else {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to add customer');
+        }
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+window.deleteCustomer = async function(id, name) {
+    if (!confirm(`Are you sure you want to delete customer "${name}"?`)) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/customers/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (res.ok) {
+            showToast(`Customer "${name}" deleted.`, 'success');
+            await loadCustomers();
+            renderCustomers();
+        } else {
+            throw new Error('Failed to delete customer');
+        }
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
 // --- Job Order Analytics ---
 
 function renderAdminJobSummaries(workOrders) {
@@ -2025,7 +2165,7 @@ function renderAdminJobSummaries(workOrders) {
     
     if (workOrders.length === 0) {
         container.innerHTML = '<p class="text-muted text-center p-4">No data available for job summaries.</p>';
-        statCount.textContent = '0 Jobs';
+        statCount.textContent = '0 Job Orders';
         return;
     }
 
@@ -2061,7 +2201,7 @@ function renderAdminJobSummaries(workOrders) {
     });
 
     const jobs = Object.values(jobsMap);
-    statCount.textContent = `${jobs.length} ${jobs.length === 1 ? 'Job' : 'Jobs'}`;
+    statCount.textContent = `${jobs.length} ${jobs.length === 1 ? 'Job Order' : 'Job Orders'}`;
 
     jobs.forEach(job => {
         const card = document.createElement('div');
@@ -2396,7 +2536,7 @@ async function loadMyWorkDashboard(filter = 'all') {
             workOrders = workOrders.filter(wo => wo.status === 'completed');
         }
         
-        statCount.textContent = `${workOrders.length} ${workOrders.length === 1 ? 'Order' : 'Orders'}`;
+        statCount.textContent = `${workOrders.length} ${workOrders.length === 1 ? 'Work Order' : 'Work Orders'}`;
         renderMyWorkOrders(workOrders);
         
     } catch (err) {

@@ -11,6 +11,7 @@ const jobOrdersRouter = require('./routes/jobOrders');
 const usersRouter = require('./routes/users');
 const workOrdersRouter = require('./routes/workOrders');
 const authRouter = require('./routes/auth');
+const customersRouter = require('./routes/customers');
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
@@ -24,6 +25,7 @@ app.use('/api/job-orders', jobOrdersRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/work-orders', workOrdersRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/customers', customersRouter);
 
 // Clock Sync Endpoint
 app.get('/api/time', (req, res) => {

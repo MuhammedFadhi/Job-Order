@@ -16,8 +16,61 @@
         <div class="orb orb-2"></div>
     </div>
 
-    <div id="app" class="app-container">
-        
+        <header id="main-nav-header" class="dashboard-header hidden-view">
+            <div class="header-main">
+                <div class="header-logo">
+                    <img src="assets/a360w.png" alt="a360 Logo" class="nav-brand-logo">
+                </div>
+                <div id="active-work-stopwatch" class="stopwatch-container hidden">
+                    <div class="stopwatch-indicator">
+                        <div class="pulse-dot"></div>
+                        <span class="active-label">Active:</span>
+                    </div>
+                    <div class="stopwatch-info">
+                        <span id="stopwatch-job" class="mono">JB-XXXX</span>
+                        <span class="divider">/</span>
+                        <span id="stopwatch-wo" class="mono">WO-XXXX</span>
+                        <span id="stopwatch-desc" class="desc-text">Description</span>
+                    </div>
+                    <div class="stopwatch-controls">
+                        <button id="btn-pause-stopwatch" class="btn-pause" title="Pause/Resume">
+                            <i class="fa-solid fa-pause"></i>
+                        </button>
+                        <div class="stopwatch-timer-wrap">
+                            <span id="stopwatch-time" class="time-display">00:00:00</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="user-profile-nav">
+                    <div class="user-info">
+                        <div style="position: relative; display: inline-block;">
+                            <div class="avatar-sm" id="current-user-avatar" style="cursor: pointer;">?</div>
+                            <input type="color" id="user-color-picker" title="Change Avatar Color" value="#6366f1" style="position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer;" />
+                        </div>
+                        <div class="user-meta">
+                            <span id="current-user-name">User Name</span>
+                        </div>
+                    </div>
+                    <div class="my-work-nav" id="my-work-nav-link">
+                        <button class="btn-nav-item" id="btn-goto-my-work" title="My Work Orders">
+                            <i class="fa-solid fa-list-check"></i>
+                            <span>My Work Orders</span>
+                        </button>
+                    </div>
+                    <div class="admin-nav hidden" id="admin-nav-link">
+                        <button class="btn-nav-item" id="btn-goto-admin" title="Admin Dashboard">
+                            <i class="fa-solid fa-gauge-high"></i>
+                            <span>Admin</span>
+                        </button>
+                    </div>
+                    <button class="btn-logout" id="btn-logout" title="Logout">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
         <!-- 1. Login View -->
         <main id="login-view" class="view">
             <div class="glass-card login-card auth-card">
@@ -86,80 +139,26 @@
 
         <!-- 2. Dashboard View -->
         <main id="dashboard-view" class="view hidden-view">
-            <!-- Top Navigation -->
-            <header class="dashboard-header">
-                <div class="header-main">
-                    <div class="header-logo">
-                        <img src="assets/a360w.png" alt="a360 Logo" class="nav-brand-logo">
-                    </div>
-                    <div id="active-work-stopwatch" class="stopwatch-container hidden">
-                        <div class="stopwatch-indicator">
-                            <div class="pulse-dot"></div>
-                            <span class="active-label">Active:</span>
-                        </div>
-                        <div class="stopwatch-info">
-                            <span id="stopwatch-job" class="mono">JB-XXXX</span>
-                            <span class="divider">/</span>
-                            <span id="stopwatch-wo" class="mono">WO-XXXX</span>
-                            <span id="stopwatch-desc" class="desc-text">Description</span>
-                        </div>
-                        <div class="stopwatch-controls">
-                            <button id="btn-pause-stopwatch" class="btn-pause" title="Pause/Resume">
-                                <i class="fa-solid fa-pause"></i>
-                            </button>
-                            <div class="stopwatch-timer-wrap">
-                                <span id="stopwatch-time" class="time-display">00:00:00</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="user-profile-nav">
-                        <div class="user-info">
-                            <div style="position: relative; display: inline-block;">
-                                <div class="avatar-sm" id="current-user-avatar" style="cursor: pointer;">?</div>
-                                <input type="color" id="user-color-picker" title="Change Avatar Color" value="#6366f1" style="position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer;" />
-                            </div>
-                            <div class="user-meta">
-                                <span id="current-user-name">User Name</span>
-                            </div>
-                        </div>
-                        <div class="my-work-nav" id="my-work-nav-link">
-                            <button class="btn-nav-item" id="btn-goto-my-work" title="My Work Orders">
-                                <i class="fa-solid fa-list-check"></i>
-                                <span>My Work</span>
-                            </button>
-                        </div>
-                        <div class="admin-nav hidden" id="admin-nav-link">
-                            <button class="btn-nav-item" id="btn-goto-admin" title="Admin Dashboard">
-                                <i class="fa-solid fa-gauge-high"></i>
-                                <span>Admin</span>
-                            </button>
-                        </div>
-                        <button class="btn-logout" id="btn-logout" title="Logout">
-                            <i class="fa-solid fa-right-from-bracket"></i>
-                        </button>
-                    </div>
-                </div>
-            </header>
-
             <div class="dashboard-content">
                 <header class="section-header">
                     <div class="header-text">
-                        <h1>a360 Command Center</h1>
-                        <p>Real-time visibility for job requests and workflows.</p>
+                        <!-- <h1>a360 Command Center</h1>
+                        <p>Real-time visibility for job requests and workflows.</p> -->
                     </div>
-                    <button class="btn btn-primary" id="btn-new-job">
-                        <i class="fa-solid fa-plus"></i> New Job Order
-                    </button>
                 </header>
 
-                <!-- JO Controls: Search & View Toggle -->
-                <div class="jo-controls-section">
-                    <div class="search-box-wrapper">
+                <!-- JO Controls: All in one line -->
+                <div class="jo-controls-section" style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap;">
+                    <div class="search-box-wrapper" style="width: 320px;">
                         <i class="fa-solid fa-magnifying-glass"></i>
                         <input type="text" id="jo-search-input" placeholder="Search by Job ID, Title, or Customer...">
                     </div>
-                    <div class="view-toggle-group">
+                    
+                    <!-- Spacer to push items to the right -->
+                    <div style="flex: 1;"></div>
+
+                    <!-- View Toggles (Moved to the right) -->
+                    <div class="view-toggle-group" style="margin: 0;">
                         <button class="view-btn active" id="btn-view-grid" title="Grid View">
                             <i class="fa-solid fa-grip"></i>
                         </button>
@@ -167,6 +166,11 @@
                             <i class="fa-solid fa-list"></i>
                         </button>
                     </div>
+
+                    <!-- New Job Order -->
+                    <button class="btn btn-primary" id="btn-new-job" style="white-space: nowrap;">
+                        <i class="fa-solid fa-plus"></i> New Job Order
+                    </button>
                 </div>
 
                 <!-- Active Jobs -->
@@ -184,7 +188,7 @@
                 <div id="completed-job-orders-container" class="grid-container">
                 </div>
             </div>
-        </main>
+        </main> 
 
         <!-- 2.5 Admin View -->
         <main id="admin-view" class="view hidden-view">
@@ -196,7 +200,7 @@
                     </div>
                     <div class="header-actions">
                         <button class="btn btn-outline" id="btn-back-to-jobs">
-                            <i class="fa-solid fa-arrow-left"></i> Back to Jobs
+                            <i class="fa-solid fa-arrow-left"></i> Back to Job  Orders
                         </button>
                     </div>
                 </div>
@@ -208,6 +212,7 @@
                     <div class="admin-tabs" id="admin-tabs">
                         <button class="tab-btn active" data-tab="all">Work Order Summaries</button>
                         <button class="tab-btn" data-tab="jobs">Job Summaries</button>
+                        <button class="tab-btn" data-tab="customers">Customers</button>
                     </div>
                     <div class="admin-filter-controls">
                         <div class="filter-group">
@@ -245,7 +250,7 @@
                             <!-- Moved inside filter-group -->
                             <div class="tab-stats" style="margin-top: 0; padding: 0.4rem 0.8rem; height: 38px; display: flex; align-items: center;">
                                 <i class="fa-solid fa-chart-simple text-accent" style="margin-right: 6px;"></i>
-                                <span id="admin-stat-count" style="font-size: 0.85rem; white-space: nowrap;">0 Orders Found</span>
+                                <span id="admin-stat-count" style="font-size: 0.85rem; white-space: nowrap;">0 Work Orders Found</span>
                             </div>
                         </div>
                     </div>
@@ -267,6 +272,26 @@
                     <!-- Job Summaries List (Aggregated) -->
                     <div id="admin-job-summaries-list" class="admin-list-content hidden">
                     </div>
+                    <!-- Customer Management Section -->
+                    <div id="admin-customers-section" class="admin-list-content hidden">
+                        <div class="glass-panel p-4 mb-4">
+                            <h4>Add New Customer</h4>
+                            <form id="add-customer-form" class="row-left mt-2" style="gap: 1rem;">
+                                <div class="form-group mb-0" style="flex: 1;">
+                                    <input type="text" id="new-customer-name" placeholder="Enter customer name..." required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Add Customer</button>
+                            </form>
+                        </div>
+                        <div class="admin-list-header">
+                            <div style="flex: 2;">Customer Name</div>
+                            <div style="flex: 1;">Date Added</div>
+                            <div style="width: 100px;">Actions</div>
+                        </div>
+                        <div id="admin-customers-list" class="admin-list-content">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
@@ -284,7 +309,7 @@
                             <i class="fa-solid fa-calendar-day"></i> Daily Report
                         </button>
                         <button class="btn btn-outline" id="btn-back-to-jobs-from-mywork">
-                            <i class="fa-solid fa-arrow-left"></i> Back to Jobs
+                            <i class="fa-solid fa-arrow-left"></i> Back to Job Orders
                         </button>
                     </div>
                 </div>
@@ -320,7 +345,7 @@
                             <!-- Moved inside filter-group -->
                             <div class="tab-stats" style="margin-top: 0; padding: 0.4rem 0.8rem; height: 38px; display: flex; align-items: center;">
                                 <i class="fa-solid fa-chart-simple text-accent" style="margin-right: 6px;"></i>
-                                <span id="mywork-stat-count" style="font-size: 0.85rem; white-space: nowrap;">0 Orders Found</span>
+                                <span id="mywork-stat-count" style="font-size: 0.85rem; white-space: nowrap;">0 Work Orders Found</span>
                             </div>
                         </div>
                     </div>
@@ -357,8 +382,11 @@
                         <input type="text" id="nj-title" required placeholder="e.g. Server Maintenance">
                     </div>
                     <div class="form-group">
-                        <label>Customer Name</label>
-                        <input type="text" id="nj-customer" required placeholder="e.g. Acme Corp">
+                        <label>Customer</label>
+                        <select id="nj-customer" required>
+                            <option value="">Select a customer...</option>
+                            <!-- Populated via JS -->
+                        </select>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -489,8 +517,10 @@
                         <input type="text" id="ej-title" required>
                     </div>
                     <div class="form-group">
-                        <label>Customer Name</label>
-                        <input type="text" id="ej-customer" required>
+                        <label>Customer</label>
+                        <select id="ej-customer" required>
+                            <!-- Populated via JS -->
+                        </select>
                     </div>
                     <div class="form-row">
                         <div class="form-group">

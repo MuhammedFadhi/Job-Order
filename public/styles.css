@@ -156,7 +156,7 @@ body {
     opacity: 0;
     visibility: hidden;
     transition: var(--transition);
-    padding: 2rem;
+    padding: 7rem 2rem 2rem 2rem; /* Increased top padding for fixed header */
 }
 
 .active-view {
@@ -577,7 +577,15 @@ textarea:focus {
     position: sticky;
     top: 0;
     z-index: 50;
-    margin: -2rem -2rem 2rem -2rem;
+}
+
+#main-nav-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    z-index: 1000;
 }
 
 .header-main {
@@ -826,7 +834,6 @@ textarea:focus {
     -webkit-backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border-glass);
     padding: 0.75rem 2rem;
-    margin: -2rem -2rem 2rem -2rem; /* Negate parent padding */
     position: sticky;
     top: 0;
     z-index: 100;
