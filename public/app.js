@@ -328,20 +328,22 @@ function setupEventListeners() {
 
     const adminDateFilter = document.getElementById('admin-date-filter');
     const adminDatePickerGroup = document.getElementById('admin-date-picker-group');
-    if (adminDateFilter && adminDatePickerGroup) {
-        adminDatePickerGroup.addEventListener('click', () => {
-            try {
-                if (typeof adminDateFilter.showPicker === 'function') {
-                    adminDateFilter.showPicker();
-                } else {
+    if (adminDateFilter) {
+        if (adminDatePickerGroup) {
+            adminDatePickerGroup.addEventListener('click', () => {
+                try {
+                    if (typeof adminDateFilter.showPicker === 'function') {
+                        adminDateFilter.showPicker();
+                    } else {
+                        adminDateFilter.focus();
+                        adminDateFilter.click();
+                    }
+                } catch (err) {
                     adminDateFilter.focus();
                     adminDateFilter.click();
                 }
-            } catch (err) {
-                adminDateFilter.focus();
-                adminDateFilter.click();
-            }
-        });
+            });
+        }
 
         adminDateFilter.addEventListener('change', (e) => {
             // Stop propagation to prevent re-opening on selection in some browsers
@@ -1041,6 +1043,18 @@ function formatDateDDMMYYYY(date) {
     return `${day}/${month}/${year}`;
 }
 
+// --- Helper: get YYYY-MM-DD in local time ---
+function getLocalYYYYMMDD(date) {
+    if (!date) return '';
+    const d = (date instanceof Date) ? date : new Date(date);
+    if (isNaN(d.getTime())) return '';
+    
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
 // --- Helper: derive isPaused from work order data ---
 function isWorkOrderPaused(wo) {
     if (!wo) return false;
@@ -1148,6 +1162,69 @@ function calcWorkedTime(woId, timeIn, timeOut, serverHistory, woUserId, woStatus
     }
     
     return totalWorked;
+}
+
+// --- Helper: calculate worked time for a specific day ---
+function calcDailyWorkedTime(woId, timeIn, timeOut, serverHistory, woUserId, woStatus, dayStartMs, dayEndMs) {
+    const localPauseState = getPauseState();
+    const woState = localPauseState[woId] || {};
+    const localHistory = woState.history || [];
+    let history = [];
+    const isOwner = currentUser && (woUserId === currentUser.id);
+
+    if (isOwner) {
+        if (!serverHistory || serverHistory.length === 0) history = localHistory;
+        else if (localHistory.length === 0) history = serverHistory;
+        else {
+            const lastServer = serverHistory[serverHistory.length - 1];
+            const lastLocal = localHistory[localHistory.length - 1];
+            if (serverHistory.length > localHistory.length || (serverHistory.length === localHistory.length && lastServer.at > lastLocal.at)) {
+                history = serverHistory;
+            } else {
+                history = localHistory;
+            }
+        }
+    } else {
+        history = serverHistory || [];
+    }
+
+    const intervals = [];
+    let currentStart = new Date(timeIn).getTime();
+    let isCurrentlyRunning = true;
+
+    for (const entry of history) {
+        if (entry.type === 'pause') {
+            if (isCurrentlyRunning) {
+                intervals.push([currentStart, entry.at]);
+                isCurrentlyRunning = false;
+            }
+        } else if (entry.type === 'resume') {
+            currentStart = entry.at;
+            isCurrentlyRunning = true;
+        } else if (entry.type === 'end') {
+            if (isCurrentlyRunning) {
+                intervals.push([currentStart, entry.at]);
+                isCurrentlyRunning = false;
+            }
+            break;
+        }
+    }
+
+    if (isCurrentlyRunning) {
+        const endTime = timeOut ? new Date(timeOut).getTime() : getServerNow();
+        intervals.push([currentStart, endTime]);
+    }
+
+    let totalMsForDay = 0;
+    intervals.forEach(([start, stop]) => {
+        const overlapStart = Math.max(start, dayStartMs);
+        const overlapEnd = Math.min(stop, dayEndMs);
+        if (overlapStart < overlapEnd) {
+            totalMsForDay += (overlapEnd - overlapStart);
+        }
+    });
+
+    return totalMsForDay;
 }
 
 // --- Helper: build timeline HTML from history ---
@@ -1867,8 +1944,7 @@ async function loadAdminDashboard(filter = 'all') {
         // Apply Date Filter if set
         const dateFilter = document.getElementById('admin-date-filter').value;
         if (dateFilter) {
-            const filterDate = formatDateDDMMYYYY(dateFilter);
-            workOrders = workOrders.filter(wo => formatDateDDMMYYYY(wo.time_in) === filterDate);
+            workOrders = workOrders.filter(wo => getLocalYYYYMMDD(wo.time_in) === dateFilter);
         }
 
         // Apply User Filter if set
@@ -2379,13 +2455,23 @@ async function handlePrintDailyReport() {
         const res = await fetch(`${API_BASE}/work-orders`);
         const allWO = await res.json();
         
-        // Filter for current user and today
-        const todayStr = new Date().toDateString();
+        // Define day boundaries
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dayStartMs = today.getTime();
+        const dayEndMs = dayStartMs + 86400000;
+
+        // Filter for current user and work active today
         const myTodayWO = allWO.filter(wo => {
             const isMe = wo.user_id === currentUser.id;
             const isTagged = Array.isArray(wo.tagged_user_ids) && wo.tagged_user_ids.includes(currentUser.id);
-            const isToday = new Date(wo.time_in).toDateString() === todayStr;
-            return (isMe || isTagged) && isToday;
+            if (!(isMe || isTagged)) return false;
+
+            const timeIn = new Date(wo.time_in).getTime();
+            const timeOut = wo.time_out ? new Date(wo.time_out).getTime() : null;
+
+            // Include if started before tomorrow AND (not finished OR finished today/later)
+            return timeIn < dayEndMs && (!timeOut || timeOut >= dayStartMs);
         });
 
         if (myTodayWO.length === 0) {
@@ -2395,7 +2481,9 @@ async function handlePrintDailyReport() {
 
         let totalMs = 0;
         const tableRows = myTodayWO.map(wo => {
-            const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, wo.user_id, wo.status);
+            const workedMs = calcDailyWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, wo.user_id, wo.status, dayStartMs, dayEndMs);
+            if (workedMs <= 0) return null;
+            
             totalMs += workedMs;
             
             const leadName = wo.user?.name || 'Unknown';
@@ -2413,16 +2501,20 @@ async function handlePrintDailyReport() {
                 participantLabel = `<br><small style="color: var(--accent-primary); background: rgba(99,102,241,0.1); padding: 1px 4px; border-radius: 3px;">Tagged: ${taggedNames.join(', ')}</small>`;
             }
             
+            // Start time for today (either time_in or 12:00 AM)
+            const startTimeTs = Math.max(new Date(wo.time_in).getTime(), dayStartMs);
+            const startTimeStr = new Date(startTimeTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
             return `
                 <tr>
                     <td>${wo.id}</td>
                     <td><strong>${wo.ref_id_jo}</strong>${participantLabel}</td>
                     <td style="max-width: 300px;">${wo.description || 'N/A'}</td>
-                    <td>${new Date(wo.time_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td>${startTimeStr}</td>
                     <td>${formatDuration(workedMs)}</td>
                 </tr>
             `;
-        }).join('');
+        }).filter(Boolean).join('');
 
         printArea.innerHTML = `
             <div class="brief-container">
@@ -2523,10 +2615,7 @@ async function loadMyWorkDashboard(filter = 'all') {
         // Apply Date Filter
         const dateFilter = document.getElementById('mywork-date-filter').value;
         if (dateFilter) {
-            workOrders = workOrders.filter(wo => {
-                const woDate = new Date(wo.time_in).toISOString().split('T')[0];
-                return woDate === dateFilter;
-            });
+            workOrders = workOrders.filter(wo => getLocalYYYYMMDD(wo.time_in) === dateFilter);
         }
 
         // Filter based on tab

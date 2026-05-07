@@ -36,6 +36,46 @@ function calculateDuration(timeIn, timeOut, pauseHistory) {
 }
 
 /**
+ * Calculates the duration in milliseconds that falls within a specific day.
+ */
+function calculateDailyDuration(timeIn, timeOut, pauseHistory, dayStartMs, dayEndMs) {
+    if (!timeIn) return 0;
+    
+    const intervals = [];
+    let currentStart = new Date(timeIn).getTime();
+    
+    if (Array.isArray(pauseHistory)) {
+        pauseHistory.forEach(event => {
+            if (event.type === 'pause') {
+                if (currentStart) {
+                    intervals.push([currentStart, event.at]);
+                    currentStart = null;
+                }
+            } else if (event.type === 'resume' || event.type === 'end') {
+                currentStart = event.at;
+            }
+        });
+    }
+    
+    // Final interval (if currently active)
+    if (currentStart) {
+        const end = timeOut ? new Date(timeOut).getTime() : Date.now();
+        intervals.push([currentStart, end]);
+    }
+    
+    let totalMsForDay = 0;
+    intervals.forEach(([start, stop]) => {
+        const overlapStart = Math.max(start, dayStartMs);
+        const overlapEnd = Math.min(stop, dayEndMs);
+        if (overlapStart < overlapEnd) {
+            totalMsForDay += (overlapEnd - overlapStart);
+        }
+    });
+    
+    return totalMsForDay;
+}
+
+/**
  * Formats duration in ms to "Xh Ym"
  */
 function formatDuration(ms) {
@@ -63,7 +103,7 @@ async function generateDailyReports() {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     try {
-        // 2. Fetch all work orders for today
+        // 2. Fetch all work orders active today (started before tomorrow and either open or finished today)
         const { data: workOrders, error: woError } = await supabase
             .from('work_orders')
             .select(`
@@ -71,10 +111,21 @@ async function generateDailyReports() {
                 users (name, username),
                 job_orders (title)
             `)
-            .gte('created_at', today.toISOString())
-            .lt('created_at', tomorrow.toISOString());
+            .lt('time_in', tomorrow.toISOString())
+            .or(`time_out.is.null,time_out.gte.${today.toISOString()}`);
 
         if (woError) throw woError;
+
+        const dayStartMs = today.getTime();
+        const dayEndMs = tomorrow.getTime();
+
+        // Calculate durations for today and filter out 0 activity
+        const activeWorkOrders = (workOrders || [])
+            .map(order => {
+                const dailyMs = calculateDailyDuration(order.time_in, order.time_out, order.pause_history, dayStartMs, dayEndMs);
+                return { ...order, _dailyMs: dailyMs };
+            })
+            .filter(order => order._dailyMs > 0);
 
         // 3. Fetch all admins
         const { data: admins, error: adminError } = await supabase
@@ -86,8 +137,8 @@ async function generateDailyReports() {
 
         const adminEmail = (process.env.ADMIN_EMAIL || '').trim();
 
-        if (!workOrders || workOrders.length === 0) {
-            console.log('No work orders found for today. Sending "No Activity" report to admin...');
+        if (!activeWorkOrders || activeWorkOrders.length === 0) {
+            console.log('No work orders found with activity today. Sending "No Activity" report to admin...');
             
             if (adminEmail) {
                 const noActivityHtml = generateNoActivityHtml();
@@ -105,10 +156,10 @@ async function generateDailyReports() {
                 }
                 
                 await sendEmail(adminEmail, subject, noActivityHtml, attachments);
-                return { success: true, message: 'No work orders found. Admin notified of no activity.' };
+                return { success: true, message: 'No work orders found with activity. Admin notified.' };
             }
             
-            return { success: true, message: 'No work orders for today.' };
+            return { success: true, message: 'No work orders with activity for today.' };
         }
 
         // 4. Fetch all users for lookup (names and emails of tagged users)
@@ -135,7 +186,7 @@ async function generateDailyReports() {
             });
         }
 
-        workOrders.forEach(order => {
+        activeWorkOrders.forEach(order => {
             const leadId = order.user_id;
             const taggedIds = Array.isArray(order.tagged_user_ids) ? order.tagged_user_ids : [];
             
@@ -197,7 +248,7 @@ async function generateDailyReports() {
             }
         }
 
-        return { success: true, totalUsers: Object.keys(userReports).length, totalOrders: workOrders.length };
+        return { success: true, totalUsers: Object.keys(userReports).length, totalOrders: activeWorkOrders.length };
 
     } catch (error) {
         console.error('Error generating reports:', error);
@@ -206,7 +257,7 @@ async function generateDailyReports() {
 }
 
 function generateUserHtml(report) {
-    const totalMs = report.orders.reduce((sum, o) => sum + calculateDuration(o.time_in, o.time_out, o.pause_history), 0);
+    const totalMs = report.orders.reduce((sum, o) => sum + o._dailyMs, 0);
     const rows = report.orders.map(o => `
         <tr>
             <td style="padding: 12px 10px; border-bottom: 1px solid #eee; font-size: 14px;">${o.id}</td>
@@ -222,7 +273,7 @@ function generateUserHtml(report) {
             <td style="padding: 12px 10px; border-bottom: 1px solid #eee; font-size: 13px;">
                 <span style="padding: 2px 8px; background: #f0f0f0; border-radius: 4px; color: #555;">${o.status}</span>
             </td>
-            <td style="padding: 12px 10px; border-bottom: 1px solid #eee; font-size: 14px; font-weight: bold; color: #333;">${formatDuration(calculateDuration(o.time_in, o.time_out, o.pause_history))}</td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #eee; font-size: 14px; font-weight: bold; color: #333;">${formatDuration(o._dailyMs)}</td>
         </tr>
     `).join('');
 
@@ -249,7 +300,7 @@ function generateUserHtml(report) {
                         <th style="text-align: left; padding: 12px 10px; font-size: 13px; color: #7b809a; text-transform: uppercase;">Job Title</th>
                         <th style="text-align: left; padding: 12px 10px; font-size: 13px; color: #7b809a; text-transform: uppercase;">Description</th>
                         <th style="text-align: left; padding: 12px 10px; font-size: 13px; color: #7b809a; text-transform: uppercase;">Status</th>
-                        <th style="text-align: left; padding: 12px 10px; font-size: 13px; color: #7b809a; text-transform: uppercase;">Duration</th>
+                        <th style="text-align: left; padding: 12px 10px; font-size: 13px; color: #7b809a; text-transform: uppercase;">Duration Today</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -302,5 +353,6 @@ function generateNoActivityHtml() {
 module.exports = { 
     generateDailyReports,
     calculateDuration,
+    calculateDailyDuration,
     formatDuration 
 };
