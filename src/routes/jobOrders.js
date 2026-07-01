@@ -1,28 +1,27 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../supabaseClient');
+const { sendProgressReport } = require('../utils/reportService');
 
 // Helper to generate JB-XXXX ID
 async function generateJobOrderID() {
-    // Get the job order with the highest ID string
     const { data, error } = await supabase
         .from('job_orders')
         .select('id')
         .order('id', { ascending: false })
         .limit(1);
-        
+
     if (error) throw error;
-    
+
     let nextNum = 1;
     if (data && data.length > 0) {
-        // Extract number from 'JB-XXXX'
         const lastId = data[0].id;
         const lastNum = parseInt(lastId.split('-')[1]);
         if (!isNaN(lastNum)) {
             nextNum = lastNum + 1;
         }
     }
-    
+
     return `JB-${nextNum.toString().padStart(4, '0')}`;
 }
 
@@ -83,11 +82,11 @@ router.post('/', async (req, res) => {
 
         const { data, error } = await supabase
             .from('job_orders')
-            .insert([{ 
+            .insert([{
                 id,
-                title, 
-                description, 
-                customer_name, 
+                title,
+                description,
+                customer_name,
                 status: status || 'open',
                 assigned_by,
                 assigned_to,
@@ -102,21 +101,34 @@ router.post('/', async (req, res) => {
     }
 });
 
+// POST send progress report email for a job order
+router.post('/:id/send-report', async (req, res) => {
+    const { requester_id } = req.body;
+
+    try {
+        const result = await sendProgressReport(req.params.id, requester_id);
+        res.json(result);
+    } catch (err) {
+        console.error('Failed to send progress report:', err);
+        res.status(500).json({ error: err.message || 'Failed to send report' });
+    }
+});
+
 // PUT update job order
 router.put('/:id', async (req, res) => {
     const { title, description, customer_name, status, assigned_by, assigned_to, priority } = req.body;
 
     const { data, error } = await supabase
         .from('job_orders')
-        .update({ 
-            title, 
-            description, 
-            customer_name, 
-            status, 
+        .update({
+            title,
+            description,
+            customer_name,
+            status,
             assigned_by,
             assigned_to,
             priority,
-            updated_at: new Date() 
+            updated_at: new Date()
         })
         .eq('id', req.params.id)
         .select();
@@ -128,7 +140,6 @@ router.put('/:id', async (req, res) => {
 
 // DELETE job order and its associated work orders
 router.delete('/:id', async (req, res) => {
-    // 1. Delete associated work orders first to satisfy foreign key constraints
     const { error: woError } = await supabase
         .from('work_orders')
         .delete()
@@ -139,7 +150,6 @@ router.delete('/:id', async (req, res) => {
         return res.status(500).json({ error: 'Failed to delete associated work orders' });
     }
 
-    // 2. Delete the job order
     const { error: joError } = await supabase
         .from('job_orders')
         .delete()

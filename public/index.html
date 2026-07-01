@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Management</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" href="assets/fav_a360.png">
+    <link rel="stylesheet" href="styles.css?v=7">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -18,7 +19,7 @@
 
         <header id="main-nav-header" class="dashboard-header hidden-view">
             <div class="header-main">
-                <div class="header-logo">
+                <div class="header-logo" id="btn-logo-home" style="cursor:pointer;" title="Go to Dashboard">
                     <img src="assets/a360w.png" alt="a360 Logo" class="nav-brand-logo">
                 </div>
                 <div id="active-work-stopwatch" class="stopwatch-container hidden">
@@ -276,11 +277,24 @@
                     <div id="admin-customers-section" class="admin-list-content hidden">
                         <div class="glass-panel p-4 mb-4">
                             <h4>Add New Customer</h4>
-                            <form id="add-customer-form" class="row-left mt-2" style="gap: 1rem;">
-                                <div class="form-group mb-0" style="flex: 1;">
-                                    <input type="text" id="new-customer-name" placeholder="Enter customer name..." required>
+                            <form id="add-customer-form" class="mt-2" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                <div class="row-left" style="gap: 1rem;">
+                                    <div class="form-group mb-0" style="flex: 1;">
+                                        <input type="text" id="new-customer-name" placeholder="Enter customer name..." required>
+                                    </div>
                                 </div>
-                                <button type="submit" class="btn btn-primary">Add Customer</button>
+                                <div>
+                                    <label style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.4rem; display: block;">Client Emails <span style="color: #666;">(optional, multiple allowed)</span></label>
+                                    <div id="customer-email-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                        <div class="customer-email-row row-left" style="gap: 0.5rem;">
+                                            <input type="email" class="customer-email-input" placeholder="client@example.com" style="flex: 1; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: inherit; font-size: 0.9rem;">
+                                            <button type="button" class="btn btn-outline btn-sm btn-add-email" title="Add another email"><i class="fa-solid fa-plus"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row-right">
+                                    <button type="submit" class="btn btn-primary">Add Customer</button>
+                                </div>
                             </form>
                         </div>
                         <div class="admin-list-header">
@@ -295,6 +309,32 @@
                 </div>
             </div>
         </main>
+
+        <!-- Edit Customer Modal -->
+        <div id="edit-customer-modal" class="modal-overlay hidden">
+            <div class="glass-card modal-content" style="max-width:480px;">
+                <div class="modal-header">
+                    <h3>Edit Customer</h3>
+                    <button class="btn-close-modal btn-icon"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <form id="edit-customer-form" style="display:flex; flex-direction:column; gap:0.75rem; padding:1.25rem 1.5rem;">
+                    <input type="hidden" id="ec-id">
+                    <div class="form-group">
+                        <label>Customer Name</label>
+                        <input type="text" id="ec-name" required placeholder="Customer name">
+                    </div>
+                    <div>
+                        <label style="font-size:0.85rem; color:#aaa; margin-bottom:0.4rem; display:block;">Client Emails <span style="color:#666;">(optional)</span></label>
+                        <div id="ec-email-list" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
+                        <button type="button" id="btn-ec-add-email" class="btn btn-outline btn-sm" style="margin-top:0.5rem;"><i class="fa-solid fa-plus"></i> Add Email</button>
+                    </div>
+                    <div class="form-actions row-right" style="padding-top:0.5rem;">
+                        <button type="button" class="btn btn-secondary btn-close-modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
         <!-- 2.7 My Work View -->
         <main id="my-work-view" class="view hidden-view">
@@ -353,12 +393,15 @@
 
                 <!-- My Work Orders List -->
                 <div class="admin-work-orders-container">
-                    <div class="admin-list-header" style="grid-template-columns: 100px 2fr 1.5fr 150px 120px;">
+                    <div class="admin-list-header mw-grid">
                         <div class="col-id">ID</div>
-                        <div class="col-info">Work Details</div>
+                        <div class="col-info">Description</div>
                         <div class="col-job">Job Order</div>
-                        <div class="col-time">Time Lapsed</div>
-                        <div class="col-status">Status</div>
+                        <div>Est. Time</div>
+                        <div>Time Taken</div>
+                        <div>Tested</div>
+                        <div>Assigned To</div>
+                        <div>Action</div>
                     </div>
                     <div id="mywork-orders-list" class="admin-list-content">
                         <div class="line-loader w-full"></div>
@@ -388,28 +431,30 @@
                             <!-- Populated via JS -->
                         </select>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="nj-priority">Priority</label>
-                            <select id="nj-priority">
-                                <option value="1">Low</option>
-                                <option value="2">Normal</option>
-                                <option value="3" selected>Medium</option>
-                                <option value="4">High</option>
-                                <option value="5">Critical</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Assigned To</label>
-                            <select id="nj-assigned">
-                                <!-- Populated by JS -->
-                            </select>
-                        </div>
+                    <div class="form-group">
+                        <label>Assigned To</label>
+                        <select id="nj-assigned">
+                            <!-- Populated by JS -->
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>Description (Optional)</label>
                         <textarea id="nj-desc" rows="3" placeholder="Provide background information..."></textarea>
                     </div>
+
+                    <div class="divider" style="margin: 1rem 0;"></div>
+
+                    <!-- Inline Work Orders -->
+                    <div class="section-header small" style="margin-bottom: 0.75rem;">
+                        <h4 style="margin:0; font-size:0.95rem;">Work Orders <span style="color:#666; font-weight:400; font-size:0.8rem;">(optional)</span></h4>
+                        <button type="button" class="btn btn-outline btn-sm" id="btn-nj-add-wo">
+                            <i class="fa-solid fa-plus"></i> Add Work Order
+                        </button>
+                    </div>
+                    <div id="nj-work-orders-list" style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:0.5rem;">
+                        <!-- Work order rows added dynamically -->
+                    </div>
+
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary btn-close-modal">Cancel</button>
                         <button type="submit" class="btn btn-primary">Create Order</button>
@@ -472,12 +517,25 @@
                     </button>
                 </div>
 
-                <!-- Create Work Order Form (Hidden by default) -->
+                <!-- Create Work Order Form (Hidden by default, admin only) -->
                 <form id="new-work-form" class="glass-panel hidden">
                     <h4>New Work Order</h4>
                     <div class="form-group">
                         <label>Description</label>
-                        <input type="text" id="nw-desc" required placeholder="What are you working on?">
+                        <input type="text" id="nw-desc" required placeholder="Describe the task...">
+                    </div>
+                    <div class="form-group">
+                        <label>Estimate Time</label>
+                        <div class="row-left" style="gap: 0.5rem;">
+                            <div style="position:relative; flex:1;">
+                                <input type="number" id="nw-est-hrs" min="0" placeholder="0" style="width:100%; padding-right: 2.5rem;">
+                                <span style="position:absolute; right:0.75rem; top:50%; transform:translateY(-50%); color:#888; font-size:0.8rem; pointer-events:none;">hr</span>
+                            </div>
+                            <div style="position:relative; flex:1;">
+                                <input type="number" id="nw-est-mins" min="0" max="59" placeholder="0" style="width:100%; padding-right: 2.5rem;">
+                                <span style="position:absolute; right:0.75rem; top:50%; transform:translateY(-50%); color:#888; font-size:0.8rem; pointer-events:none;">min</span>
+                            </div>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>Tag Collaborators (Optional)</label>
@@ -487,7 +545,7 @@
                     </div>
                     <div class="form-actions row-right">
                         <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-work">Cancel</button>
-                        <button type="submit" class="btn btn-primary btn-sm">Start Work</button>
+                        <button type="submit" class="btn btn-primary btn-sm">Create Work Order</button>
                     </div>
                 </form>
 
@@ -498,6 +556,9 @@
 
                 <div class="modal-footer mt-4">
                     <button type="button" class="btn btn-outline btn-close-modal">Close</button>
+                    <button type="button" class="btn btn-outline" id="btn-send-report" style="color: #6366f1; border-color: #6366f1;">
+                        <i class="fa-solid fa-paper-plane"></i> Send Report
+                    </button>
                     <button type="button" class="btn btn-success" id="btn-close-job">Mark Job Complete</button>
                 </div>
             </div>
@@ -619,7 +680,7 @@
         </div>
     </footer>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=10"></script>
     <div id="job-brief-print-area"></div>
 </body>
 </html>

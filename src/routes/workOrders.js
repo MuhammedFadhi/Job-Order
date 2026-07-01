@@ -4,25 +4,23 @@ const supabase = require('../supabaseClient');
 
 // Helper to generate WIP-XXXX ID
 async function generateWorkOrderID() {
-    // Get the work order with the highest ID string
     const { data, error } = await supabase
         .from('work_orders')
         .select('id')
         .order('id', { ascending: false })
         .limit(1);
-        
+
     if (error) throw error;
-    
+
     let nextNum = 1;
     if (data && data.length > 0) {
-        // Extract number from 'WIP-XXXX'
         const lastId = data[0].id;
         const lastNum = parseInt(lastId.split('-')[1]);
         if (!isNaN(lastNum)) {
             nextNum = lastNum + 1;
         }
     }
-    
+
     return `WIP-${nextNum.toString().padStart(4, '0')}`;
 }
 
@@ -54,9 +52,9 @@ router.get('/:id', async (req, res) => {
     res.json(data);
 });
 
-// POST new work order
+// POST new work order (admin creates as pending, or user creates and starts immediately)
 router.post('/', async (req, res) => {
-    const { status, description, user_id, ref_id_jo } = req.body;
+    const { description, user_id, ref_id_jo, tagged_user_ids, estimate_time } = req.body;
 
     if (!ref_id_jo) {
         return res.status(400).json({ error: 'Job Order Reference ID is required' });
@@ -64,17 +62,21 @@ router.post('/', async (req, res) => {
 
     try {
         const id = await generateWorkOrderID();
-        
+
+        // If user_id provided, start immediately; otherwise create as pending
+        const isPending = !user_id;
+
         const { data, error } = await supabase
             .from('work_orders')
-            .insert([{ 
+            .insert([{
                 id,
-                status: status || 'started', 
-                description, 
-                user_id, 
+                status: isPending ? 'pending' : 'started',
+                description,
+                user_id: user_id || null,
                 ref_id_jo,
-                tagged_user_ids: req.body.tagged_user_ids || [],
-                time_in: new Date()
+                tagged_user_ids: tagged_user_ids || [],
+                estimate_time: estimate_time || null,
+                time_in: isPending ? null : new Date()
             }])
             .select();
 
@@ -85,25 +87,69 @@ router.post('/', async (req, res) => {
     }
 });
 
+// PUT /:id/start — user claims and starts a pending work order
+router.put('/:id/start', async (req, res) => {
+    const { user_id } = req.body;
+
+    if (!user_id) {
+        return res.status(400).json({ error: 'user_id is required to start a work order' });
+    }
+
+    try {
+        // Verify the WO is still pending
+        const { data: existing, error: fetchErr } = await supabase
+            .from('work_orders')
+            .select('status, user_id')
+            .eq('id', req.params.id)
+            .single();
+
+        if (fetchErr || !existing) return res.status(404).json({ error: 'Work order not found' });
+        if (existing.status !== 'pending') {
+            return res.status(400).json({ error: 'Work order is not in pending state' });
+        }
+
+        const { data, error } = await supabase
+            .from('work_orders')
+            .update({
+                status: 'started',
+                user_id,
+                time_in: new Date(),
+                updated_at: new Date()
+            })
+            .eq('id', req.params.id)
+            .select();
+
+        if (error) return res.status(500).json({ error: error.message });
+        res.json(data[0]);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to start work order' });
+    }
+});
+
 // PUT update work order
 router.put('/:id', async (req, res) => {
-    const { status, description, time_out, pause_history } = req.body;
-    
-    // Auto-set time_out if status is completed and no time_out provided
+    const { status, description, time_out, pause_history, estimate_time, tested, user_id } = req.body;
+
     let updatedTimeOut = time_out;
     if (status === 'completed' && !time_out) {
         updatedTimeOut = new Date();
     }
 
+    const updateFields = {
+        status,
+        description,
+        time_out: updatedTimeOut,
+        pause_history,
+        updated_at: new Date()
+    };
+
+    if (estimate_time !== undefined) updateFields.estimate_time = estimate_time;
+    if (tested !== undefined) updateFields.tested = tested;
+    if (user_id !== undefined) updateFields.user_id = user_id;
+
     const { data, error } = await supabase
         .from('work_orders')
-        .update({ 
-            status, 
-            description, 
-            time_out: updatedTimeOut,
-            pause_history,
-            updated_at: new Date() 
-        })
+        .update(updateFields)
         .eq('id', req.params.id)
         .select();
 

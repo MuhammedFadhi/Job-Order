@@ -243,7 +243,22 @@ function setupEventListeners() {
     // Modals
     document.getElementById('btn-new-job').addEventListener('click', () => {
         populateUserDropdown('nj-assigned');
+        document.getElementById('nj-work-orders-list').innerHTML = ''; // clear leftover rows
         openModal(modals.newJob);
+    });
+
+    // Add Work Order row inside Create Job modal
+    document.getElementById('btn-nj-add-wo').addEventListener('click', () => {
+        const list = document.getElementById('nj-work-orders-list');
+        const row = document.createElement('div');
+        row.className = 'nj-wo-row row-left';
+        row.style.cssText = 'gap: 0.5rem; align-items: center;';
+        row.innerHTML = `
+            <input type="text" class="nj-wo-desc" placeholder="Work order description..." style="flex: 1; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: inherit; font-size: 0.9rem;">
+            <button type="button" class="btn btn-outline btn-sm btn-nj-remove-wo" title="Remove"><i class="fa-solid fa-trash" style="color:#f87171;"></i></button>
+        `;
+        row.querySelector('.btn-nj-remove-wo').addEventListener('click', () => row.remove());
+        list.appendChild(row);
     });
 
     document.querySelectorAll('.btn-close-modal').forEach(btn => {
@@ -324,6 +339,23 @@ function setupEventListeners() {
     const addCustomerForm = document.getElementById('add-customer-form');
     if (addCustomerForm) {
         addCustomerForm.addEventListener('submit', handleAddCustomer);
+
+        // Dynamic email rows: add new email row when "+" is clicked
+        addCustomerForm.addEventListener('click', (e) => {
+            if (e.target.closest('.btn-add-email')) {
+                const emailList = document.getElementById('customer-email-list');
+                const newRow = document.createElement('div');
+                newRow.className = 'customer-email-row row-left';
+                newRow.style.gap = '0.5rem';
+                newRow.innerHTML = `
+                    <input type="email" class="customer-email-input" placeholder="client@example.com" style="flex: 1; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: inherit; font-size: 0.9rem;">
+                    <button type="button" class="btn btn-outline btn-sm btn-remove-email" title="Remove"><i class="fa-solid fa-minus"></i></button>`;
+                emailList.appendChild(newRow);
+            }
+            if (e.target.closest('.btn-remove-email')) {
+                e.target.closest('.customer-email-row').remove();
+            }
+        });
     }
 
     const adminDateFilter = document.getElementById('admin-date-filter');
@@ -405,6 +437,12 @@ function setupEventListeners() {
             showToast('Filters cleared', 'success');
         });
     }
+
+    // Logo → Dashboard
+    document.getElementById('btn-logo-home')?.addEventListener('click', () => {
+        switchView('dashboard');
+        loadDashboard();
+    });
 
     // My Work Navigation
     const btnGotoMyWork = document.getElementById('btn-goto-my-work');
@@ -751,7 +789,7 @@ function createJobCard(job) {
 
     // Check for active work orders
     if (job.work_orders && job.work_orders.length > 0) {
-        const activeWorkOrders = job.work_orders.filter(wo => wo.status !== 'completed');
+        const activeWorkOrders = job.work_orders.filter(wo => wo.status !== 'completed' && wo.status !== 'pending' && wo.time_in);
         if (activeWorkOrders.length > 0) {
             const localPauseState = getPauseState();
             // Sort by time_in ascending (oldest first)
@@ -854,13 +892,11 @@ function createJobListItem(job) {
 
 function populateUserDropdown(selectId) {
     const select = document.getElementById(selectId);
-    select.innerHTML = '<option value="">-- Select Assignee --</option>';
+    select.innerHTML = '<option value="">Open</option>';
     allUsers.forEach(u => {
         const opt = document.createElement('option');
         opt.value = u.id;
         opt.textContent = `${u.name} (${u.role})`;
-        // Default assignment to self
-        if(currentUser && u.id === currentUser.id) opt.selected = true;
         select.appendChild(opt);
     });
 }
@@ -869,16 +905,23 @@ function populateUserDropdown(selectId) {
 
 async function handleCreateJob(e) {
     e.preventDefault();
-    
+
     const payload = {
         title: document.getElementById('nj-title').value,
         customer_name: document.getElementById('nj-customer').value,
-        priority: parseInt(document.getElementById('nj-priority').value),
-        assigned_to: document.getElementById('nj-assigned').value,
+        assigned_to: document.getElementById('nj-assigned').value || null,
         assigned_by: currentUser.id,
         description: document.getElementById('nj-desc').value,
         status: 'open'
     };
+
+    // Collect inline work order descriptions (no estimate — users set that themselves)
+    const woRows = document.querySelectorAll('#nj-work-orders-list .nj-wo-row');
+    const workOrderDrafts = [];
+    woRows.forEach(row => {
+        const desc = row.querySelector('.nj-wo-desc').value.trim();
+        if (desc) workOrderDrafts.push({ description: desc });
+    });
 
     try {
         const res = await fetch(`${API_BASE}/job-orders`, {
@@ -886,17 +929,34 @@ async function handleCreateJob(e) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
-        if(res.ok) {
-            showToast('Job order created successfully!', 'success');
-            closeModal(modals.newJob);
-            document.getElementById('new-job-form').reset();
-            loadDashboard(); // Refresh grid
-        } else {
-            throw new Error('Failed to create');
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to create job order');
         }
-    } catch {
-        showToast('Failed to create job order.', 'error');
+        const newJob = await res.json();
+
+        // Create work orders — failures don't block JO success
+        let woCreated = 0;
+        for (const wo of workOrderDrafts) {
+            try {
+                const woRes = await fetch(`${API_BASE}/work-orders`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ description: wo.description, ref_id_jo: newJob.id })
+                });
+                if (woRes.ok) woCreated++;
+            } catch { /* individual WO failure is non-blocking */ }
+        }
+
+        const woMsg = woCreated > 0 ? ` with ${woCreated} work order(s)` : '';
+        showToast(`Job order created${woMsg}!`, 'success');
+        closeModal(modals.newJob);
+        document.getElementById('new-job-form').reset();
+        document.getElementById('nj-work-orders-list').innerHTML = '';
+        loadDashboard();
+    } catch (err) {
+        showToast(err.message || 'Failed to create job order.', 'error');
     }
 }
 
@@ -944,6 +1004,12 @@ async function openJobDetail(jobId) {
             btnClose.style.display = 'none';
         } else {
             btnClose.style.display = 'block';
+        }
+
+        // Wire up Send Report button
+        const btnSendReport = document.getElementById('btn-send-report');
+        if (btnSendReport) {
+            btnSendReport.onclick = () => handleSendReport(currentJobOrder.id);
         }
 
         openModal(modals.jobDetail);
@@ -1017,6 +1083,15 @@ function getPriorityHTML(level) {
         5: '<i class="fa-solid fa-flag priority-flag prio-5"></i> Critical'
     };
     return `<span class="badge badge-prio prio-${p}">${icons[p] || icons[3]}</span>`;
+}
+
+function formatEstimate(totalMins) {
+    if (!totalMins || totalMins <= 0) return '—';
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m}m`;
 }
 
 // --- Helper: format milliseconds to Xh Ym Zs ---
@@ -1094,6 +1169,7 @@ function isWorkOrderPaused(wo) {
 
 // --- Helper: calculate total worked time from history ---
 function calcWorkedTime(woId, timeIn, timeOut, serverHistory, woUserId, woStatus) {
+    if (!timeIn) return 0; // pending WO — not started yet
     const localPauseState = getPauseState();
     const woState = localPauseState[woId] || {};
     const localHistory = woState.history || [];
@@ -1295,7 +1371,19 @@ function renderWorkOrders(workOrders) {
     list.innerHTML = '';
     
     if(workOrders.length === 0) {
-        list.innerHTML = '<p class="text-muted" style="margin-top:0.5rem;">No work orders currently active. Add one to begin tracking time.</p>';
+        list.innerHTML = '<p class="text-muted" style="margin-top:0.5rem;">No work orders yet.</p>';
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'btn btn-outline btn-sm';
+        addBtn.style.cssText = 'margin-top:0.5rem; width:100%; justify-content:center; border-style:dashed; color:#6366f1; border-color:#6366f1; opacity:0.7;';
+        addBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Add Work Order';
+        addBtn.addEventListener('click', () => {
+            document.getElementById('new-work-form').classList.remove('hidden');
+            document.getElementById('btn-new-work').classList.add('hidden');
+            populateTaggingList();
+            document.getElementById('nw-desc').focus();
+        });
+        list.appendChild(addBtn);
         return;
     }
 
@@ -1305,44 +1393,87 @@ function renderWorkOrders(workOrders) {
     const localPauseState = getPauseState();
 
     workOrders.forEach(wo => {
+        const isPending = wo.status === 'pending';
         const isCompleted = wo.status === 'completed';
         const isPaused = isWorkOrderPaused(wo);
-        const isActive = !isCompleted && !isPaused;
+        const isActive = !isCompleted && !isPaused && !isPending;
 
         const item = document.createElement('div');
         item.className = `work-item ${isActive ? 'active-work' : ''}`;
 
         let badgeClass = 'status-started';
-        let badgeLabel = 'IN PROGRESS'; // Updated from STARTED for better flow
+        let badgeLabel = 'IN PROGRESS';
+        if (isPending)   { badgeClass = 'status-paused'; badgeLabel = 'OPEN'; }
         if (isCompleted) { badgeClass = 'status-completed'; badgeLabel = 'COMPLETED'; }
         else if (isPaused) { badgeClass = 'status-paused'; badgeLabel = 'PAUSED'; }
 
-        const startDate = new Date(wo.time_in);
-        const workDate = formatDateDDMMYYYY(startDate);
-        const timeIn = startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        const timeOut = wo.time_out
-            ? new Date(wo.time_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-            : (isPaused ? 'Paused' : 'Ongoing');
-
-        // Calculate actual worked time
         const woUserId = wo.user_id || (wo.user ? wo.user.id : null);
-        const workedMs = calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, woUserId, wo.status);
-        const workedStr = formatDuration(workedMs);
+        const workedMs = isPending ? 0 : calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, woUserId, wo.status);
+        const workedStr = isPending ? '—' : formatDuration(workedMs);
+        const estimateStr = formatEstimate(wo.estimate_time);
         const canAct = currentUser && (woUserId === currentUser.id);
 
-        // Build timeline
-        const timelineHTML = buildTimelineHTML(wo.id, wo.time_in, wo.time_out, wo.pause_history);
+        const testedVal = TESTED_CFG_GLOBAL[wo.tested] ? wo.tested : 'not_tested';
+        const { label: tLabel, color: tc } = TESTED_CFG_GLOBAL[testedVal];
+        const testedSelectHTML = `
+            <div class="wo-tested-wrap" id="tested-wrap-${wo.id}">
+                <button type="button" class="wo-tested-btn" data-wo-id="${wo.id}"
+                    style="border:1px solid ${tc}66; background:${tc}18; color:${tc};">
+                    <span class="tested-dot" style="background:${tc};"></span>
+                    <span class="tested-lbl">${tLabel}</span>
+                    <i class="fa-solid fa-chevron-down tested-chevron"></i>
+                </button>
+            </div>`;
+
+        const estHrs  = wo.estimate_time ? Math.floor(wo.estimate_time / 60) : '';
+        const estMins = wo.estimate_time ? wo.estimate_time % 60 : '';
+        const inlineEstHTML = `
+            <span style="display:inline-flex; align-items:center; gap:4px; padding:3px 10px;
+                         border-radius:20px; border:1px solid rgba(255,255,255,0.1);
+                         background:rgba(255,255,255,0.04); font-size:0.78rem; color:#888;">
+                <i class="fa-solid fa-hourglass-half" style="font-size:0.65rem; color:#6366f1;"></i>
+                <span style="color:#666; font-size:0.72rem;">Est</span>
+                <input type="number" min="0" placeholder="0" value="${estHrs}"
+                    class="wo-est-input" data-wo-id="${wo.id}" data-field="est-hrs"
+                    style="width:34px; padding:2px 5px; border-radius:6px;
+                           border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.06);
+                           color:inherit; font-size:0.78rem; text-align:center; outline:none;">
+                <span style="color:#555; font-size:0.7rem;">hr</span>
+                <input type="number" min="0" max="59" placeholder="0" value="${estMins}"
+                    class="wo-est-input" data-wo-id="${wo.id}" data-field="est-mins"
+                    style="width:34px; padding:2px 5px; border-radius:6px;
+                           border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.06);
+                           color:inherit; font-size:0.78rem; text-align:center; outline:none;">
+                <span style="color:#555; font-size:0.7rem;">min</span>
+            </span>`;
+
+        const assignedName = wo.user ? wo.user.name : (isPending ? '<span style="color:#f59e0b;">Open</span>' : 'Unknown');
+
+        const timelineHTML = isPending ? '' : buildTimelineHTML(wo.id, wo.time_in, wo.time_out, wo.pause_history);
+
+        const startDate = wo.time_in ? new Date(wo.time_in) : null;
+        const workDate = startDate ? formatDateDDMMYYYY(startDate) : '—';
+        const timeIn = startDate ? startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
+        const timeOut = wo.time_out
+            ? new Date(wo.time_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+            : (isPaused ? 'Paused' : (isPending ? '—' : 'Ongoing'));
+
+        const safeDesc = (wo.description || '').replace(/'/g, "\\'");
 
         item.innerHTML = `
             <div class="work-item-top">
                 <div class="work-info">
-                    <span class="work-desc">${wo.description}</span>
-                    <span class="work-meta">${wo.id} | ${workDate} | ${timeIn} &rarr; ${timeOut}</span>
-                    <span class="work-hours"><i class="fa-regular fa-clock"></i> Worked: <strong>${workedStr}</strong></span>
+                    <span class="work-desc">${wo.description || 'No description'}</span>
+                    <span class="work-meta">${wo.id} | ${workDate}${startDate ? ` | ${timeIn} &rarr; ${timeOut}` : ''}</span>
+                    <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; margin-top:4px;">
+                        <span class="work-hours"><i class="fa-regular fa-clock"></i> Worked: <strong>${workedStr}</strong></span>
+                        ${inlineEstHTML}
+                        ${testedSelectHTML}
+                    </div>
                 </div>
                 <div class="work-item-actions">
                     <div class="worker-group">
-                        <span class="work-user" title="Lead"><i class="fa-solid fa-user"></i> ${wo.user ? wo.user.name : (currentUser ? currentUser.name : 'Unknown')}</span>
+                        <span class="work-user" title="${isPending ? 'Open — anyone can start' : 'Lead'}"><i class="fa-solid fa-user"></i> ${assignedName}</span>
                         ${(wo.tagged_user_ids || []).map(tId => {
                             const u = allUsers.find(user => user.id === tId);
                             if (!u) return '';
@@ -1352,50 +1483,135 @@ function renderWorkOrders(workOrders) {
                         }).join('')}
                     </div>
                     <span class="badge ${badgeClass}">${badgeLabel}</span>
-                    <button class="btn btn-icon btn-sm" onclick="openEditWorkModal('${wo.id}', '${wo.description.replace(/'/g, "\\'")}')" title="Edit Description">
+                    <button class="btn btn-icon btn-sm" onclick="openEditWorkModal('${wo.id}', '${safeDesc}')" title="Edit Description">
                         <i class="fa-solid fa-pen"></i>
                     </button>
-                    ${!isCompleted ? `<button class="btn btn-outline btn-sm" onclick="toggleWorkOrderPause('${wo.id}', '${wo.status}')" ${!canAct ? 'disabled title="Only the user who started this work can pause/resume"' : ''}>${isPaused ? '<i class="fa-solid fa-play"></i> Resume' : '<i class="fa-solid fa-pause"></i> Pause'}</button>` : ''}
-                    ${!isCompleted ? `<button class="btn btn-outline btn-sm" onclick="completeWorkOrder('${wo.id}')" ${!canAct ? 'disabled title="Only the user who started this work can finish it"' : ''}>Finish</button>` : ''}
+                    ${isPending ? `<button class="btn btn-primary btn-sm" onclick="handleStartWorkOrder('${wo.id}')"><i class="fa-solid fa-play"></i> Start</button>` : ''}
+                    ${!isCompleted && !isPending ? `<button class="btn btn-outline btn-sm" onclick="toggleWorkOrderPause('${wo.id}', '${wo.status}')" ${!canAct ? 'disabled title="Only the assigned user can pause/resume"' : ''}>${isPaused ? '<i class="fa-solid fa-play"></i> Resume' : '<i class="fa-solid fa-pause"></i> Pause'}</button>` : ''}
+                    ${!isCompleted && !isPending ? `<button class="btn btn-outline btn-sm" onclick="completeWorkOrder('${wo.id}')" ${!canAct ? 'disabled title="Only the assigned user can finish"' : ''}>Finish</button>` : ''}
+                    ${currentUser && currentUser.role === 'Admin' ? `<button class="btn btn-icon btn-sm" onclick="deleteWorkOrder('${wo.id}')" title="Delete Work Order" style="color:#f87171;"><i class="fa-solid fa-trash"></i></button>` : ''}
                 </div>
             </div>
             ${timelineHTML}
         `;
         list.appendChild(item);
+
+        // --- Post-render: bind estimate inputs ---
+        item.querySelectorAll('.wo-est-input').forEach(inp => {
+            inp.addEventListener('blur', () => saveWOEstimate(wo.id, inp));
+            inp.addEventListener('focus', () => inp.style.borderColor = '#6366f1');
+            inp.addEventListener('blur', () => inp.style.borderColor = 'rgba(255,255,255,0.1)');
+        });
+
+        // --- Post-render: bind tested custom dropdown ---
+        const testedBtn = item.querySelector('.wo-tested-btn');
+        if (testedBtn) {
+            testedBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeAllTestedDropdowns();
+                const wrap = testedBtn.closest('.wo-tested-wrap');
+                const panel = buildTestedPanel(wo.id, testedVal);
+                wrap.appendChild(panel);
+                testedBtn.classList.add('open');
+            });
+        }
     });
+
+    // Admin: inline "Add Work Order" shortcut at the bottom of the list
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn btn-outline btn-sm';
+    addBtn.style.cssText = 'margin-top:0.75rem; width:100%; justify-content:center; border-style:dashed; color:#6366f1; border-color:#6366f1; opacity:0.7;';
+    addBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Add Work Order';
+    addBtn.addEventListener('click', () => {
+        document.getElementById('new-work-form').classList.remove('hidden');
+        document.getElementById('btn-new-work').classList.add('hidden');
+        populateTaggingList();
+        document.getElementById('nw-desc').focus();
+        document.getElementById('new-work-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    list.appendChild(addBtn);
 }
+
+const TESTED_CFG_GLOBAL = {
+    not_tested: { label: 'Not Tested', color: '#94a3b8' },
+    testing:    { label: 'Testing',    color: '#f59e0b' },
+    pass:       { label: 'Pass',       color: '#22c55e' },
+    needs_fix:  { label: 'Needs Fix',  color: '#ef4444' }
+};
+
+function closeAllTestedDropdowns() {
+    document.querySelectorAll('.wo-tested-panel').forEach(p => p.remove());
+    document.querySelectorAll('.wo-tested-btn.open').forEach(b => b.classList.remove('open'));
+}
+
+function buildTestedPanel(woId, currentVal) {
+    const panel = document.createElement('div');
+    panel.className = 'wo-tested-panel';
+    Object.entries(TESTED_CFG_GLOBAL).forEach(([val, { label, color }]) => {
+        const opt = document.createElement('div');
+        opt.className = 'wo-tested-option';
+        opt.innerHTML = `<span class="opt-dot" style="background:${color};"></span><span style="color:#ddd;">${label}</span>`;
+        if (val === currentVal) opt.style.background = 'rgba(255,255,255,0.07)';
+        opt.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            closeAllTestedDropdowns();
+            await saveWOField(woId, 'tested', val);
+            // Update button appearance immediately (optimistic)
+            const btn = document.querySelector(`.wo-tested-btn[data-wo-id="${woId}"]`);
+            if (btn) {
+                btn.style.borderColor = color + '66';
+                btn.style.background  = color + '18';
+                btn.style.color       = color;
+                btn.querySelector('.tested-dot').style.background = color;
+                btn.querySelector('.tested-lbl').textContent = label;
+                btn.dataset.tested = val;
+            }
+        });
+        panel.appendChild(opt);
+    });
+    return panel;
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', () => closeAllTestedDropdowns());
 
 async function handleCreateWorkOrder(e) {
     e.preventDefault();
     if(!currentJobOrder) return;
-    
+
     const desc = document.getElementById('nw-desc').value;
-    
+    const nwHrs = parseInt(document.getElementById('nw-est-hrs').value) || 0;
+    const nwMins = parseInt(document.getElementById('nw-est-mins').value) || 0;
+    const estimateTime = (nwHrs * 60 + nwMins) || null;
+
     // Collect tagged users
     const taggedIds = Array.from(document.querySelectorAll('#nw-tag-list input:checked'))
         .map(cb => cb.value);
-    
+
     try {
         const res = await fetch(`${API_BASE}/work-orders`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 description: desc,
-                user_id: currentUser.id,
                 ref_id_jo: currentJobOrder.id,
-                tagged_user_ids: taggedIds
+                tagged_user_ids: taggedIds,
+                estimate_time: estimateTime
+                // No user_id — creates as pending/open for any user to start
             })
         });
-        
+
         if(res.ok) {
-            showToast('Work order started.', 'success');
-            openJobDetail(currentJobOrder.id); // Refresh modal data
-            loadDashboard(); // Refresh dashboard card to show latest work time
+            showToast('Work order created. Users can now start it from My Work.', 'success');
+            document.getElementById('nw-estimate').value = '';
+            openJobDetail(currentJobOrder.id);
+            loadDashboard();
         } else {
             throw new Error('Failed');
         }
     } catch {
-        showToast('Failed to start work.', 'error');
+        showToast('Failed to create work order.', 'error');
     }
 }
 
@@ -1444,12 +1660,14 @@ async function handleUpdateWorkOrder(e) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ description: desc })
         });
-        
+
         if(res.ok) {
             showToast('Work order updated.', 'success');
             closeModal(modals.editWork);
             if (currentJobOrder) openJobDetail(currentJobOrder.id);
-            loadDashboard();
+            const activeMyWork = document.getElementById('my-work-view') && !document.getElementById('my-work-view').classList.contains('hidden-view');
+            if (activeMyWork) loadMyWorkDashboard(document.querySelector('#mywork-tabs .tab-btn.active')?.dataset.tab || 'all');
+            else loadDashboard();
         } else {
             throw new Error('Failed to update');
         }
@@ -1491,8 +1709,11 @@ window.completeWorkOrder = async function(workOrderId) {
             });
             
             showToast('Work order completed.', 'success');
-            openJobDetail(currentJobOrder.id);
+            if (currentJobOrder) openJobDetail(currentJobOrder.id);
             loadDashboard();
+            if (!document.getElementById('my-work-view').classList.contains('hidden-view')) {
+                loadMyWorkDashboard(document.querySelector('#mywork-tabs .tab-btn.active')?.dataset.tab || 'all');
+            }
         } else {
             throw new Error('Failed');
         }
@@ -1500,6 +1721,24 @@ window.completeWorkOrder = async function(workOrderId) {
         showToast('Failed to complete work.', 'error');
     }
 }
+
+window.deleteWorkOrder = async function(woId) {
+    if (!currentUser || currentUser.role !== 'Admin') return;
+    if (!confirm('Delete this work order? This cannot be undone.')) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/work-orders/${woId}`, { method: 'DELETE' });
+        if (res.ok) {
+            showToast('Work order deleted.', 'success');
+            if (currentJobOrder) openJobDetail(currentJobOrder.id);
+            loadDashboard();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch {
+        showToast('Failed to delete work order.', 'error');
+    }
+};
 
 window.toggleWorkOrderPause = async function(workOrderId, currentStatus) {
     const pauseState = getPauseState();
@@ -1546,6 +1785,9 @@ window.toggleWorkOrderPause = async function(workOrderId, currentStatus) {
 
     if (currentJobOrder) await openJobDetail(currentJobOrder.id);
     if (typeof loadDashboard === 'function') await loadDashboard();
+    if (!document.getElementById('my-work-view').classList.contains('hidden-view')) {
+        loadMyWorkDashboard(document.querySelector('#mywork-tabs .tab-btn.active')?.dataset.tab || 'all');
+    }
 }
 
 window.openEditTimeModal = function(woId, type, index, timestamp) {
@@ -2170,11 +2412,21 @@ function renderCustomers() {
         row.className = 'admin-list-row';
         row.style.display = 'flex';
         row.style.alignItems = 'center';
-        
+        row.style.flexWrap = 'wrap';
+
+        const emailsHTML = Array.isArray(c.emails) && c.emails.length > 0
+            ? c.emails.map(e => `<span style="font-size:0.75rem; padding: 2px 8px; background: rgba(99,102,241,0.12); color: #a5b4fc; border-radius: 4px; border: 1px solid rgba(99,102,241,0.2);">${e}</span>`).join(' ')
+            : `<span style="font-size:0.75rem; color:#555;">No emails</span>`;
+
         row.innerHTML = `
-            <div style="flex: 2; font-weight: 500;">${c.name}</div>
+            <div style="flex: 2; font-weight: 500;">${c.name}
+                <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">${emailsHTML}</div>
+            </div>
             <div style="flex: 1; font-size: 0.85rem; color: #999;">${formatDateDDMMYYYY(c.created_at)}</div>
-            <div style="width: 100px;">
+            <div style="width: 120px; display:flex; gap:0.4rem;">
+                <button class="btn btn-outline btn-sm" onclick="openEditCustomerModal('${c.id}')">
+                    <i class="fa-solid fa-pen"></i>
+                </button>
                 <button class="btn btn-outline btn-sm text-error" onclick="deleteCustomer('${c.id}', '${c.name}')">
                     <i class="fa-solid fa-trash"></i>
                 </button>
@@ -2188,19 +2440,30 @@ async function handleAddCustomer(e) {
     e.preventDefault();
     const nameInput = document.getElementById('new-customer-name');
     const name = nameInput.value.trim();
-    
     if (!name) return;
-    
+
+    // Collect all email inputs
+    const emails = Array.from(document.querySelectorAll('#customer-email-list .customer-email-input'))
+        .map(inp => inp.value.trim())
+        .filter(v => v && v.includes('@'));
+
     try {
         const res = await fetch(`${API_BASE}/customers`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
+            body: JSON.stringify({ name, emails })
         });
-        
+
         if (res.ok) {
             showToast(`Customer "${name}" added successfully.`, 'success');
             nameInput.value = '';
+            // Reset email list to one empty row
+            const emailList = document.getElementById('customer-email-list');
+            emailList.innerHTML = `
+                <div class="customer-email-row row-left" style="gap: 0.5rem;">
+                    <input type="email" class="customer-email-input" placeholder="client@example.com" style="flex: 1; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: inherit; font-size: 0.9rem;">
+                    <button type="button" class="btn btn-outline btn-sm btn-add-email" title="Add another email"><i class="fa-solid fa-plus"></i></button>
+                </div>`;
             await loadCustomers();
             renderCustomers();
         } else {
@@ -2231,6 +2494,72 @@ window.deleteCustomer = async function(id, name) {
         showToast(err.message, 'error');
     }
 }
+
+window.openEditCustomerModal = function(id) {
+    const c = allCustomers.find(x => x.id == id);
+    if (!c) return;
+
+    document.getElementById('ec-id').value = c.id;
+    document.getElementById('ec-name').value = c.name;
+
+    // Populate email rows
+    const emailList = document.getElementById('ec-email-list');
+    emailList.innerHTML = '';
+    const emails = Array.isArray(c.emails) && c.emails.length > 0 ? c.emails : [''];
+    emails.forEach(email => {
+        const row = document.createElement('div');
+        row.className = 'customer-email-row row-left';
+        row.style.cssText = 'gap:0.5rem;';
+        row.innerHTML = `
+            <input type="email" class="ec-email-input" value="${email}" placeholder="client@example.com"
+                style="flex:1; padding:0.5rem 0.75rem; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:inherit; font-size:0.9rem;">
+            <button type="button" class="btn btn-outline btn-sm btn-ec-remove-email" title="Remove"><i class="fa-solid fa-minus"></i></button>`;
+        emailList.appendChild(row);
+    });
+
+    openModal(document.getElementById('edit-customer-modal'));
+};
+
+document.getElementById('btn-ec-add-email')?.addEventListener('click', () => {
+    const emailList = document.getElementById('ec-email-list');
+    const row = document.createElement('div');
+    row.className = 'customer-email-row row-left';
+    row.style.cssText = 'gap:0.5rem;';
+    row.innerHTML = `
+        <input type="email" class="ec-email-input" placeholder="client@example.com"
+            style="flex:1; padding:0.5rem 0.75rem; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:inherit; font-size:0.9rem;">
+        <button type="button" class="btn btn-outline btn-sm btn-ec-remove-email" title="Remove"><i class="fa-solid fa-minus"></i></button>`;
+    emailList.appendChild(row);
+});
+
+document.getElementById('ec-email-list')?.addEventListener('click', e => {
+    if (e.target.closest('.btn-ec-remove-email')) {
+        e.target.closest('.customer-email-row').remove();
+    }
+});
+
+document.getElementById('edit-customer-form')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const id = document.getElementById('ec-id').value;
+    const name = document.getElementById('ec-name').value.trim();
+    const emails = Array.from(document.querySelectorAll('#ec-email-list .ec-email-input'))
+        .map(i => i.value.trim()).filter(v => v);
+
+    try {
+        const res = await fetch(`${API_BASE}/customers/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, emails })
+        });
+        if (!res.ok) throw new Error('Failed');
+        showToast('Customer updated.', 'success');
+        closeModal(document.getElementById('edit-customer-modal'));
+        await loadCustomers();
+        renderCustomers();
+    } catch {
+        showToast('Failed to update customer.', 'error');
+    }
+});
 
 // --- Job Order Analytics ---
 
@@ -2583,17 +2912,22 @@ async function loadMyWorkDashboard(filter = 'all') {
         const res = await fetch(`${API_BASE}/work-orders`);
         let workOrders = await res.json();
         
-        // Filter to show WOs where user is lead OR tagged
-        workOrders = workOrders.filter(wo => {
-            const isLead = wo.user_id === currentUser.id || (wo.user && wo.user.id === currentUser.id);
-            const isTagged = Array.isArray(wo.tagged_user_ids) && wo.tagged_user_ids.includes(currentUser.id);
-            return isLead || isTagged;
-        });
-        
+        // Admins see all; regular users see own + open (pending) WOs
+        const isAdmin = currentUser.role === 'Admin';
+        if (!isAdmin) {
+            workOrders = workOrders.filter(wo => {
+                const isLead = wo.user_id === currentUser.id || (wo.user && wo.user.id === currentUser.id);
+                const isTagged = Array.isArray(wo.tagged_user_ids) && wo.tagged_user_ids.includes(currentUser.id);
+                const isOpen = wo.status === 'pending' && !wo.user_id;
+                return isLead || isTagged || isOpen;
+            });
+        }
+
         // Mark tagged ones for display
         workOrders = workOrders.map(wo => ({
             ...wo,
-            _isTagged: !(wo.user_id === currentUser.id || (wo.user && wo.user.id === currentUser.id))
+            _isTagged: !!(!(wo.user_id === currentUser.id || (wo.user && wo.user.id === currentUser.id)) && wo.user_id),
+            _isOpen: wo.status === 'pending' && !wo.user_id
         }));
 
         // Apply Search Filter
@@ -2612,10 +2946,10 @@ async function loadMyWorkDashboard(filter = 'all') {
             workOrders = workOrders.filter(wo => wo.ref_id_jo === joFilter);
         }
 
-        // Apply Date Filter
+        // Apply Date Filter (pending WOs have no time_in; show them regardless of date filter)
         const dateFilter = document.getElementById('mywork-date-filter').value;
         if (dateFilter) {
-            workOrders = workOrders.filter(wo => getLocalYYYYMMDD(wo.time_in) === dateFilter);
+            workOrders = workOrders.filter(wo => wo.status === 'pending' || getLocalYYYYMMDD(wo.time_in) === dateFilter);
         }
 
         // Filter based on tab
@@ -2637,53 +2971,154 @@ async function loadMyWorkDashboard(filter = 'all') {
 function renderMyWorkOrders(workOrders) {
     const container = document.getElementById('mywork-orders-list');
     container.innerHTML = '';
-    
+
     if (workOrders.length === 0) {
-        container.innerHTML = '<p class="text-muted text-center p-4">You have no work orders matching this criteria.</p>';
+        container.innerHTML = '<p class="text-muted text-center p-4">No work orders match this criteria.</p>';
         return;
     }
-    
+
+    const testedLabels = { not_tested: 'Not Tested', testing: 'Testing', pass: 'Pass', needs_fix: 'Needs Fix' };
+    const testedColors = { not_tested: '#94a3b8', testing: '#f59e0b', pass: '#22c55e', needs_fix: '#ef4444' };
+
     workOrders.forEach(wo => {
+        const isPending = wo.status === 'pending' && !wo.user_id;
+        const isCompleted = wo.status === 'completed';
+
         const row = document.createElement('div');
         row.className = 'admin-list-row';
-        row.style.gridTemplateColumns = '100px 2fr 1.5fr 150px 120px';
-        
-        const timeLapsed = calculateAdminTimeLapsed(wo); // Reuse simple calculator
-        
-        const badgeClass = wo.status === 'completed' ? 'status-completed' : 'status-started';
-        const badgeLabel = wo.status === 'completed' ? 'COMPLETED' : 'IN PROGRESS';
-        
-        // Tag indicator if this user is a collaborator, not the lead
-        const taggedBadge = wo._isTagged 
-            ? `<span class="badge" style="background: rgba(99,102,241,0.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); font-size:0.65rem; margin-left: 5px;"><i class="fa-solid fa-tag"></i> Tagged</span>`
+
+        const workedMs = isPending ? 0 : calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, wo.user_id, wo.status);
+        const timeTaken = isPending ? '—' : formatDuration(workedMs);
+        const estimateStr = formatEstimate(wo.estimate_time);
+
+        const testedVal = testedLabels[wo.tested] ? wo.tested : 'not_tested';
+        const testedBadge = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:0.7rem;font-weight:600; padding:3px 9px; border-radius:20px; background:${testedColors[testedVal]}18; color:${testedColors[testedVal]}; border:1px solid ${testedColors[testedVal]}55; white-space:nowrap;"><span style="width:6px;height:6px;border-radius:50%;background:${testedColors[testedVal]};flex-shrink:0;"></span>${testedLabels[testedVal]}</span>`;
+
+        const assignedDisplay = isPending
+            ? `<span class="badge" style="background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); font-size:0.7rem;">Open</span>`
+            : (wo.user ? `<span style="font-size:0.85rem;">${wo.user.name}</span>` : '—');
+
+        const taggedBadge = wo._isTagged
+            ? `<span class="badge" style="background: rgba(99,102,241,0.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); font-size:0.65rem; margin-left: 4px;"><i class="fa-solid fa-tag"></i> Tagged</span>`
             : '';
-            
-        const leadUser = wo.user ? wo.user.name : 'Unknown';
-        const tagLine = wo._isTagged ? `<span class="admin-meta" style="color: #a5b4fc;"><i class="fa-solid fa-user-tie"></i> Lead: ${leadUser}</span>` : '';
-        
+
+        const safeDesc = (wo.description || '').replace(/'/g, "\\'");
+        const isPaused = wo.status === 'paused';
+        const canAct = wo.user_id === currentUser.id;
+
+        let actionBtn;
+        if (isPending) {
+            actionBtn = `<button class="btn btn-primary btn-sm" style="font-size:0.75rem; padding:0.3rem 0.8rem;" onclick="handleStartWorkOrder('${wo.id}')"><i class="fa-solid fa-play"></i> Start</button>`;
+        } else if (isCompleted) {
+            actionBtn = `<span class="badge status-completed" style="font-size:0.7rem;">DONE</span>`;
+        } else {
+            const pauseBtn = canAct
+                ? `<button class="btn btn-outline btn-sm" style="font-size:0.72rem; padding:0.25rem 0.6rem;" onclick="toggleWorkOrderPause('${wo.id}', '${wo.status}')">
+                    <i class="fa-solid ${isPaused ? 'fa-play' : 'fa-pause'}"></i> ${isPaused ? 'Resume' : 'Pause'}
+                  </button>`
+                : '';
+            const finishBtn = canAct
+                ? `<button class="btn btn-outline btn-sm" style="font-size:0.72rem; padding:0.25rem 0.6rem; color:#22c55e; border-color:#22c55e55;" onclick="completeWorkOrder('${wo.id}')">
+                    <i class="fa-solid fa-check"></i> Finish
+                  </button>`
+                : '';
+            actionBtn = `${pauseBtn}${finishBtn}`;
+        }
+
         row.innerHTML = `
             <div class="col-id">${wo.id}</div>
             <div class="col-info">
                 <span class="admin-desc">${wo.description || 'No description'} ${taggedBadge}</span>
-                <span class="admin-meta">Started ${formatDateDDMMYYYY(wo.time_in)} ${new Date(wo.time_in).toLocaleTimeString()}</span>
-                ${tagLine}
+                <span class="admin-meta">${wo.ref_id_jo}${wo.job_order ? ' · ' + wo.job_order.title : ''}</span>
             </div>
             <div class="col-job">
-                <div class="admin-job-link">
-                    <span class="admin-job-id">${wo.ref_id_jo}</span>
-                    <span class="admin-job-title" title="${wo.job_order ? wo.job_order.title : 'N/A'}">${wo.job_order ? wo.job_order.title : 'N/A'}</span>
-                </div>
+                <span class="admin-job-id" style="display:block;">${wo.ref_id_jo}</span>
+                <span class="admin-job-title" title="${wo.job_order ? wo.job_order.title : 'N/A'}" style="display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${wo.job_order ? wo.job_order.title : 'N/A'}</span>
             </div>
-            <div class="col-time">
-                <span class="admin-time-val">${timeLapsed}</span>
-            </div>
-            <div class="col-status">
-                <span class="badge ${badgeClass}">${badgeLabel}</span>
-            </div>
+            <div style="display:flex; align-items:center; font-size:0.82rem; color:#94a3b8; font-weight:500;">${estimateStr}</div>
+            <div style="display:flex; align-items:center; font-size:0.82rem; font-weight:600; color:#e2e8f0;">${timeTaken}</div>
+            <div style="display:flex; align-items:center;">${testedBadge}</div>
+            <div style="display:flex; align-items:center;">${assignedDisplay}</div>
+            <div style="display:flex; align-items:center; gap:0.35rem; flex-wrap:nowrap;">${actionBtn}</div>
         `;
-        
+
         container.appendChild(row);
     });
+}
+
+window.saveWOField = async function(woId, field, value) {
+    try {
+        await fetch(`${API_BASE}/work-orders/${woId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [field]: value })
+        });
+    } catch { /* silent */ }
+};
+
+window.saveWOEstimate = async function(woId, changedInput) {
+    // Find both hr and min inputs for this WO in the same card
+    const card = changedInput.closest('.work-item');
+    if (!card) return;
+    const hrsInput  = card.querySelector(`input[data-wo-id="${woId}"][data-field="est-hrs"]`);
+    const minsInput = card.querySelector(`input[data-wo-id="${woId}"][data-field="est-mins"]`);
+    const hrs  = parseInt(hrsInput?.value)  || 0;
+    const mins = parseInt(minsInput?.value) || 0;
+    const totalMins = hrs * 60 + mins || null;
+    try {
+        await fetch(`${API_BASE}/work-orders/${woId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estimate_time: totalMins })
+        });
+    } catch { /* silent */ }
+};
+
+window.handleStartWorkOrder = async function(woId) {
+    if (!currentUser) return;
+    try {
+        const res = await fetch(`${API_BASE}/work-orders/${woId}/start`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: currentUser.id })
+        });
+        if (res.ok) {
+            showToast('Work started!', 'success');
+            const activeTab = document.querySelector('#mywork-tabs .tab-btn.active')?.dataset.tab || 'all';
+            loadMyWorkDashboard(activeTab);
+            if (currentJobOrder) openJobDetail(currentJobOrder.id);
+            loadDashboard();
+        } else {
+            const err = await res.json();
+            showToast(err.error || 'Failed to start work order.', 'error');
+        }
+    } catch {
+        showToast('Failed to start work order.', 'error');
+    }
+};
+
+async function handleSendReport(jobOrderId) {
+    if (!currentUser) return;
+    const btn = document.getElementById('btn-send-report');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...'; }
+
+    try {
+        const res = await fetch(`${API_BASE}/job-orders/${jobOrderId}/send-report`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requester_id: currentUser.id })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast(`Report sent to ${data.recipientCount} recipient(s).`, 'success');
+        } else {
+            showToast(data.error || 'Failed to send report.', 'error');
+        }
+    } catch {
+        showToast('Failed to send report.', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Report'; }
+    }
 }
 
 async function populateMyWorkJobFilter() {

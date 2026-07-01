@@ -1761,28 +1761,34 @@ textarea:focus {
 }
 
 .admin-list-content {
-    max-height: 600px;
-    overflow-y: auto;
+    overflow-y: visible;
 }
 
 .admin-list-header {
-    display: flex;
-    padding: 1rem 1.5rem;
-    background: rgba(255, 255, 255, 0.03);
+    display: grid;
+    grid-template-columns: 80px 2fr 1.3fr 85px 90px 115px 130px 150px;
+    padding: 0.65rem 1.25rem;
+    background: rgba(99,102,241,0.06);
     border-bottom: 1px solid var(--border-glass);
-    font-size: 0.75rem;
+    font-size: 0.68rem;
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.07em;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    backdrop-filter: blur(6px);
 }
 
 .admin-list-row {
-    display: flex;
-    padding: 1.25rem 1.5rem;
-    border-bottom: 1px solid var(--border-glass);
-    transition: var(--transition);
+    display: grid;
+    grid-template-columns: 80px 2fr 1.3fr 85px 90px 115px 130px 150px;
+    padding: 0.85rem 1.25rem;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: background 0.15s;
     align-items: center;
+    gap: 0;
 }
 
 .admin-list-row:last-child {
@@ -1790,41 +1796,43 @@ textarea:focus {
 }
 
 .admin-list-row:hover {
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(99,102,241,0.05);
 }
 
-/* Column Widths */
+/* Column helpers — no fixed widths needed (grid handles it) */
 .col-id {
-    width: 100px;
-    flex-shrink: 0;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
+    font-size: 0.78rem;
+    color: #a5b4fc;
+    font-weight: 600;
 }
 
 .col-info {
-    flex: 1;
-    padding-right: 1.5rem;
+    padding-right: 1rem;
+    min-width: 0;
 }
 
-.col-user {
-    width: 150px;
-    flex-shrink: 0;
+.col-info .admin-desc {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
 }
+
+.col-user { }
 
 .col-job {
-    width: 220px;
-    flex-shrink: 0;
+    padding-right: 0.75rem;
+    min-width: 0;
 }
 
-.col-time {
-    width: 140px;
-    flex-shrink: 0;
-}
+.col-time { }
 
 .col-status {
-    width: 120px;
-    flex-shrink: 0;
-    text-align: right;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: nowrap;
 }
 
 /* Content Styles */
@@ -2678,4 +2686,52 @@ select#admin-user-filter {
     .powered-by {
         font-size: 0.75rem;
     }
+}
+
+/* =========== ESTIMATE INPUTS — NO SPINNERS =========== */
+.wo-est-input::-webkit-inner-spin-button,
+.wo-est-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.wo-est-input { -moz-appearance: textfield; }
+
+/* =========== TESTED CUSTOM DROPDOWN =========== */
+.wo-tested-wrap { position: relative; display: inline-block; }
+
+.wo-tested-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px 4px 8px; border-radius: 20px;
+    font-size: 0.72rem; font-weight: 600; cursor: pointer;
+    white-space: nowrap; transition: opacity 0.15s;
+    font-family: inherit;
+}
+.wo-tested-btn:hover { opacity: 0.85; }
+.wo-tested-btn .tested-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+}
+.wo-tested-btn .tested-chevron {
+    font-size: 0.5rem; opacity: 0.8; transition: transform 0.2s;
+}
+.wo-tested-btn.open .tested-chevron { transform: rotate(180deg); }
+
+.wo-tested-panel {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 9999;
+    min-width: 148px; border-radius: 10px;
+    background: var(--surface-glass, #161b2e);
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    padding: 4px; animation: fadeInDown 0.15s ease;
+}
+.wo-tested-option {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px; border-radius: 7px; cursor: pointer;
+    font-size: 0.78rem; font-weight: 500;
+    transition: background 0.12s;
+}
+.wo-tested-option:hover { background: rgba(255,255,255,0.07); }
+.wo-tested-option .opt-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+
+@keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
