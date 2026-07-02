@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Management</title>
     <link rel="icon" type="image/png" href="assets/fav_a360.png">
-    <link rel="stylesheet" href="styles.css?v=7">
+    <link rel="stylesheet" href="styles.css?v=8">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -152,7 +152,7 @@
                 <div class="jo-controls-section" style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap;">
                     <div class="search-box-wrapper" style="width: 320px;">
                         <i class="fa-solid fa-magnifying-glass"></i>
-                        <input type="text" id="jo-search-input" placeholder="Search by Job ID, Title, or Customer...">
+                        <input type="text" id="jo-search-input" placeholder="Search by Job ID, Title, or Client...">
                     </div>
                     
                     <!-- Spacer to push items to the right -->
@@ -213,7 +213,7 @@
                     <div class="admin-tabs" id="admin-tabs">
                         <button class="tab-btn active" data-tab="all">Work Order Summaries</button>
                         <button class="tab-btn" data-tab="jobs">Job Summaries</button>
-                        <button class="tab-btn" data-tab="customers">Customers</button>
+                        <button class="tab-btn" data-tab="customers">Clients</button>
                     </div>
                     <div class="admin-filter-controls">
                         <div class="filter-group">
@@ -276,11 +276,11 @@
                     <!-- Customer Management Section -->
                     <div id="admin-customers-section" class="admin-list-content hidden">
                         <div class="glass-panel p-4 mb-4">
-                            <h4>Add New Customer</h4>
-                            <form id="add-customer-form" class="mt-2" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <h4>Add New Client</h4>
+                            <form id="add-customer-form" class="mt-2" style="display: flex; flex-direction: column; gap: 0.75rem; max-width: 520px;">
                                 <div class="row-left" style="gap: 1rem;">
                                     <div class="form-group mb-0" style="flex: 1;">
-                                        <input type="text" id="new-customer-name" placeholder="Enter customer name..." required>
+                                        <input type="text" id="new-customer-name" placeholder="Enter client name..." required>
                                     </div>
                                 </div>
                                 <div>
@@ -293,12 +293,12 @@
                                     </div>
                                 </div>
                                 <div class="row-right">
-                                    <button type="submit" class="btn btn-primary">Add Customer</button>
+                                    <button type="submit" class="btn btn-primary">Add Client</button>
                                 </div>
                             </form>
                         </div>
                         <div class="admin-list-header">
-                            <div style="flex: 2;">Customer Name</div>
+                            <div style="flex: 2;">Client Name</div>
                             <div style="flex: 1;">Date Added</div>
                             <div style="width: 100px;">Actions</div>
                         </div>
@@ -314,14 +314,14 @@
         <div id="edit-customer-modal" class="modal-overlay hidden">
             <div class="glass-card modal-content" style="max-width:480px;">
                 <div class="modal-header">
-                    <h3>Edit Customer</h3>
+                    <h3>Edit Client</h3>
                     <button class="btn-close-modal btn-icon"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <form id="edit-customer-form" style="display:flex; flex-direction:column; gap:0.75rem; padding:1.25rem 1.5rem;">
                     <input type="hidden" id="ec-id">
                     <div class="form-group">
-                        <label>Customer Name</label>
-                        <input type="text" id="ec-name" required placeholder="Customer name">
+                        <label>Client Name</label>
+                        <input type="text" id="ec-name" required placeholder="Client name">
                     </div>
                     <div>
                         <label style="font-size:0.85rem; color:#aaa; margin-bottom:0.4rem; display:block;">Client Emails <span style="color:#666;">(optional)</span></label>
@@ -425,9 +425,9 @@
                         <input type="text" id="nj-title" required placeholder="e.g. Server Maintenance">
                     </div>
                     <div class="form-group">
-                        <label>Customer</label>
+                        <label>Client</label>
                         <select id="nj-customer" required>
-                            <option value="">Select a customer...</option>
+                            <option value="">Select a client...</option>
                             <!-- Populated via JS -->
                         </select>
                     </div>
@@ -482,7 +482,7 @@
                 
                 <div class="job-meta-grid">
                     <div class="meta-item">
-                        <span class="meta-label">Customer</span>
+                        <span class="meta-label">Client</span>
                         <span class="meta-val" id="jd-customer">-</span>
                     </div>
                     <div class="meta-item">
@@ -526,12 +526,12 @@
                     </div>
                     <div class="form-group">
                         <label>Estimate Time</label>
-                        <div class="row-left" style="gap: 0.5rem;">
-                            <div style="position:relative; flex:1;">
+                        <div style="display:flex; flex-direction:row; flex-wrap:nowrap; gap: 0.75rem;">
+                            <div style="position:relative; width:110px;">
                                 <input type="number" id="nw-est-hrs" min="0" placeholder="0" style="width:100%; padding-right: 2.5rem;">
                                 <span style="position:absolute; right:0.75rem; top:50%; transform:translateY(-50%); color:#888; font-size:0.8rem; pointer-events:none;">hr</span>
                             </div>
-                            <div style="position:relative; flex:1;">
+                            <div style="position:relative; width:110px;">
                                 <input type="number" id="nw-est-mins" min="0" max="59" placeholder="0" style="width:100%; padding-right: 2.5rem;">
                                 <span style="position:absolute; right:0.75rem; top:50%; transform:translateY(-50%); color:#888; font-size:0.8rem; pointer-events:none;">min</span>
                             </div>
@@ -578,7 +578,7 @@
                         <input type="text" id="ej-title" required>
                     </div>
                     <div class="form-group">
-                        <label>Customer</label>
+                        <label>Client</label>
                         <select id="ej-customer" required>
                             <!-- Populated via JS -->
                         </select>
@@ -680,7 +680,7 @@
         </div>
     </footer>
 
-    <script src="app.js?v=10"></script>
+    <script src="app.js?v=11"></script>
     <div id="job-brief-print-area"></div>
 </body>
 </html>

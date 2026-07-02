@@ -362,7 +362,7 @@ function generateSignOffHtml(jobOrder, userMap) {
         <div style="background:#f8f9fb; border-radius:8px; padding:16px 20px; margin-bottom:24px; border-left:4px solid #6366f1;">
             <div style="font-size:12px; color:#aaa; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.05em;">Job Order</div>
             <div style="font-size:18px; font-weight:700; color:#111;">${jobOrder.title} <span style="color:#aaa; font-size:14px; font-weight:normal;">[${jobOrder.id}]</span></div>
-            ${jobOrder.customer_name ? `<div style="font-size:13px; color:#555; margin-top:6px;"><strong>Customer:</strong> ${jobOrder.customer_name}</div>` : ''}
+            ${jobOrder.customer_name ? `<div style="font-size:13px; color:#555; margin-top:6px;"><strong>Client:</strong> ${jobOrder.customer_name}</div>` : ''}
             <div style="margin-top:10px; font-size:13px; color:#22c55e; font-weight:600;">${workOrders.length} of ${workOrders.length} work orders completed</div>
         </div>
 
@@ -461,7 +461,7 @@ function generateProgressReportHtml(jobOrder, userMap, allCompleted) {
         <div style="background: #f8f9fb; border-radius: 8px; padding: 16px; margin-bottom: 20px; border-left: 4px solid ${statusBannerColor};">
             <div style="font-size: 13px; color: #888; margin-bottom: 4px;">Job Order</div>
             <div style="font-size: 18px; font-weight: 700; color: #111;">${jobOrder.title} <span style="color: #aaa; font-size: 14px; font-weight: normal;">[${jobOrder.id}]</span></div>
-            ${jobOrder.customer_name ? `<div style="font-size: 13px; color: #666; margin-top: 4px;"><strong>Customer:</strong> ${jobOrder.customer_name}</div>` : ''}
+            ${jobOrder.customer_name ? `<div style="font-size: 13px; color: #666; margin-top: 4px;"><strong>Client:</strong> ${jobOrder.customer_name}</div>` : ''}
             ${jobOrder.description ? `<div style="font-size: 13px; color: #666; margin-top: 4px;">${jobOrder.description}</div>` : ''}
             <div style="margin-top: 10px; font-size: 13px; color: ${statusBannerColor}; font-weight: 600;">${statusBannerText}</div>
         </div>

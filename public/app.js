@@ -1604,7 +1604,9 @@ async function handleCreateWorkOrder(e) {
 
         if(res.ok) {
             showToast('Work order created. Users can now start it from My Work.', 'success');
-            document.getElementById('nw-estimate').value = '';
+            document.getElementById('nw-desc').value = '';
+            document.getElementById('nw-est-hrs').value = '';
+            document.getElementById('nw-est-mins').value = '';
             openJobDetail(currentJobOrder.id);
             loadDashboard();
         } else {
@@ -2403,7 +2405,7 @@ function renderCustomers() {
     container.innerHTML = '';
     
     if (allCustomers.length === 0) {
-        container.innerHTML = '<p class="text-muted text-center p-4">No customers added yet.</p>';
+        container.innerHTML = '<p class="text-muted text-center p-4">No clients added yet.</p>';
         return;
     }
     
@@ -2455,7 +2457,7 @@ async function handleAddCustomer(e) {
         });
 
         if (res.ok) {
-            showToast(`Customer "${name}" added successfully.`, 'success');
+            showToast(`Client "${name}" added successfully.`, 'success');
             nameInput.value = '';
             // Reset email list to one empty row
             const emailList = document.getElementById('customer-email-list');
@@ -2484,7 +2486,7 @@ window.deleteCustomer = async function(id, name) {
         });
         
         if (res.ok) {
-            showToast(`Customer "${name}" deleted.`, 'success');
+            showToast(`Client "${name}" deleted.`, 'success');
             await loadCustomers();
             renderCustomers();
         } else {
@@ -2552,12 +2554,12 @@ document.getElementById('edit-customer-form')?.addEventListener('submit', async 
             body: JSON.stringify({ name, emails })
         });
         if (!res.ok) throw new Error('Failed');
-        showToast('Customer updated.', 'success');
+        showToast('Client updated.', 'success');
         closeModal(document.getElementById('edit-customer-modal'));
         await loadCustomers();
         renderCustomers();
     } catch {
-        showToast('Failed to update customer.', 'error');
+        showToast('Failed to update client.', 'error');
     }
 });
 

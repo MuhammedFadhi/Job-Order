@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JO System — User Guide</title>
+<link rel="icon" type="image/png" href="assets/fav_a360.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --indigo: #6366f1;
+    --indigo-light: #818cf8;
+    --indigo-dark: #4f46e5;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --slate: #94a3b8;
+    --bg: #f8f9fc;
+    --card: #ffffff;
+    --border: #e8eaf0;
+    --text: #1e1f26;
+    --muted: #64748b;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 56px;
+    overflow-x: auto;
+  }
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--indigo);
+    white-space: nowrap;
+    margin-right: 2rem;
+    text-decoration: none;
+  }
+  .nav-logo img { height: 28px; }
+  .nav-links { display: flex; gap: 0.15rem; }
+  .nav-links a {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .nav-links a:hover { background: #f0f1ff; color: var(--indigo); }
+  .nav-links a.active { background: #eeefff; color: var(--indigo); }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #3730a3 100%);
+    padding: 5rem 2rem 4rem;
+    text-align: center;
+    color: white;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 20px;
+    padding: 0.3rem 1rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    position: relative;
+  }
+  .hero h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 1rem;
+    position: relative;
+  }
+  .hero p {
+    font-size: 1.1rem;
+    opacity: 0.85;
+    max-width: 520px;
+    margin: 0 auto 2.5rem;
+    position: relative;
+  }
+  .hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 2.5rem;
+    position: relative;
+    flex-wrap: wrap;
+  }
+  .hero-stat { text-align: center; }
+  .hero-stat .num { font-size: 2rem; font-weight: 800; }
+  .hero-stat .lbl { font-size: 0.8rem; opacity: 0.7; margin-top: 2px; }
+
+  /* ── STAGE FLOW ── */
+  .stage-nav {
+    display: flex;
+    justify-content: center;
+    gap: 0;
+    padding: 2.5rem 2rem 0;
+    flex-wrap: wrap;
+  }
+  .stage-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: default;
+    padding: 0 1.2rem;
+    position: relative;
+  }
+  .stage-nav-item:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: -1px;
+    top: 16px;
+    width: 2px;
+    height: 2px;
+    background: var(--border);
+    border-radius: 50%;
+  }
+  .stage-dot {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--indigo);
+    color: white;
+    font-size: 0.72rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .stage-dot.admin { background: var(--indigo); }
+  .stage-dot.user { background: var(--green); }
+  .stage-dot.both { background: var(--amber); }
+  .stage-nav-label { font-size: 0.7rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+
+  /* ── CONTENT ── */
+  .content { max-width: 860px; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
+
+  /* ── SECTION ── */
+  .stage-section {
+    margin-bottom: 4rem;
+    scroll-margin-top: 70px;
+  }
+  .stage-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .stage-number {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--indigo);
+    opacity: 0.12;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    width: 72px;
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .stage-info { flex: 1; }
+  .stage-role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+  }
+  .badge-admin { background: #eeefff; color: var(--indigo); }
+  .badge-user { background: #f0fdf4; color: #16a34a; }
+  .badge-all { background: #fffbeb; color: #b45309; }
+  .stage-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    margin-bottom: 0.3rem;
+  }
+  .stage-subtitle { font-size: 0.9rem; color: var(--muted); }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .card-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--slate);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .card-title i { color: var(--indigo); }
+
+  /* ── STEPS ── */
+  .steps { display: flex; flex-direction: column; gap: 0.6rem; }
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    transition: background 0.15s;
+  }
+  .step:hover { background: #f8f9fc; }
+  .step-num {
+    width: 22px; height: 22px;
+    background: var(--indigo);
+    color: white;
+    border-radius: 50%;
+    font-size: 0.65rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .step-text { font-size: 0.88rem; color: #374151; line-height: 1.5; }
+  .step-text strong { color: var(--text); }
+
+  /* ── RULES ── */
+  .rules { display: flex; flex-direction: column; gap: 0.5rem; }
+  .rule {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .rule:last-child { border-bottom: none; }
+  .rule i { margin-top: 2px; flex-shrink: 0; }
+
+  /* ── STATUS FLOW ── */
+  .status-flow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .status-pill {
+    padding: 0.3rem 0.85rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .status-flow .arrow { color: var(--slate); font-size: 0.8rem; }
+  .s-pending { background: #f1f5f9; color: #64748b; }
+  .s-started { background: #eef2ff; color: var(--indigo); }
+  .s-paused  { background: #fffbeb; color: #b45309; }
+  .s-done    { background: #f0fdf4; color: #16a34a; }
+
+  /* ── UI MOCK ── */
+  .ui-mock {
+    background: #0f1117;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #2a2d3e;
+    margin-bottom: 1rem;
+  }
+  .mock-bar {
+    background: #1a1d2e;
+    border-bottom: 1px solid #2a2d3e;
+    padding: 0.6rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .mock-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .mock-bar-title {
+    font-size: 0.7rem;
+    color: #555;
+    margin-left: 0.5rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .mock-body { padding: 1rem 1.25rem; }
+
+  /* ── GRID ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ── TAG CHIPS ── */
+  .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+  .chip {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid;
+  }
+  .chip-purple { background: #eef2ff; color: var(--indigo); border-color: #c7d2fe; }
+  .chip-green  { background: #f0fdf4; color: #16a34a; border-color: #bbf7d0; }
+  .chip-amber  { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+  .chip-red    { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+  .chip-slate  { background: #f8fafc; color: #475569; border-color: #cbd5e1; }
+
+  /* ── TIP ── */
+  .tip {
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    border-left: 4px solid var(--indigo);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    font-size: 0.83rem;
+    color: #3730a3;
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    margin-top: 0.75rem;
+  }
+  .tip i { margin-top: 1px; flex-shrink: 0; }
+
+  .warn {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-left: 4px solid var(--amber);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    font-size: 0.83rem;
+    color: #92400e;
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    margin-top: 0.75rem;
+  }
+
+  /* ── DIVIDER ── */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 3rem 0; }
+
+  /* ── FOOTER ── */
+  footer {
+    background: #1e1f26;
+    color: #64748b;
+    text-align: center;
+    padding: 2rem;
+    font-size: 0.8rem;
+  }
+  footer strong { color: #94a3b8; }
+
+  /* ── INLINE BADGE ── */
+  .inline-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 4px;
+    vertical-align: middle;
+  }
+
+  /* mock WO row */
+  .mock-wo-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: #1a1d2e;
+    border: 1px solid #2a2d3e;
+    border-radius: 8px;
+    padding: 0.65rem 0.9rem;
+    margin-bottom: 0.5rem;
+  }
+  .mock-wo-id { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #818cf8; font-weight: 600; width: 70px; flex-shrink: 0; }
+  .mock-wo-desc { flex: 1; font-size: 0.78rem; color: #e2e8f0; font-weight: 500; }
+  .mock-btn {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.2rem 0.6rem;
+    border-radius: 5px;
+    border: none;
+    cursor: default;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .mock-btn-purple { background: #6366f1; color: white; }
+  .mock-btn-outline { background: transparent; color: #818cf8; border: 1px solid #3a3d5e; }
+  .mock-btn-green { background: #22c55e; color: white; }
+  .mock-badge { font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
+  .mock-badge-open { background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); }
+  .mock-badge-done { background: rgba(34,197,94,0.15); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
+  .mock-badge-prog { background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="#top">
+    <img src="assets/a360w.png" alt="a360" onerror="this.style.display='none'">
+    JO System
+  </a>
+  <div class="nav-links">
+    <a href="#s1">01 Login</a>
+    <a href="#s2">02 Dashboard</a>
+    <a href="#s3">03 Create JO</a>
+    <a href="#s4">04 Work Orders</a>
+    <a href="#s5">05 My Work</a>
+    <a href="#s6">06 Reports</a>
+    <a href="#s7">07 Admin Panel</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero" id="top">
+  <div class="hero-badge"><i class="fa-solid fa-book-open"></i> User Guide · Job Order System</div>
+  <h1>How the System Works</h1>
+  <p>A step-by-step walkthrough for Admins and Users — from creating a job order to sending the final report.</p>
+  <div class="hero-stats">
+    <div class="hero-stat"><div class="num">7</div><div class="lbl">Stages</div></div>
+    <div class="hero-stat"><div class="num">2</div><div class="lbl">Roles</div></div>
+    <div class="hero-stat"><div class="num">∞</div><div class="lbl">Work Orders</div></div>
+  </div>
+</div>
+
+<!-- STAGE FLOW DOTS -->
+<div class="stage-nav">
+  <div class="stage-nav-item"><div class="stage-dot both">01</div><div class="stage-nav-label">Login</div></div>
+  <div class="stage-nav-item"><div class="stage-dot both">02</div><div class="stage-nav-label">Dashboard</div></div>
+  <div class="stage-nav-item"><div class="stage-dot admin">03</div><div class="stage-nav-label">Create JO</div></div>
+  <div class="stage-nav-item"><div class="stage-dot both">04</div><div class="stage-nav-label">Work Orders</div></div>
+  <div class="stage-nav-item"><div class="stage-dot user">05</div><div class="stage-nav-label">My Work</div></div>
+  <div class="stage-nav-item"><div class="stage-dot admin">06</div><div class="stage-nav-label">Reports</div></div>
+  <div class="stage-nav-item"><div class="stage-dot admin">07</div><div class="stage-nav-label">Admin Panel</div></div>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+  <!-- ─────────────── STAGE 01 ─────────────── -->
+  <div class="stage-section" id="s1">
+    <div class="stage-header">
+      <div class="stage-number">01</div>
+      <div class="stage-info">
+        <div class="stage-role-badge badge-all"><i class="fa-solid fa-users"></i> All Users</div>
+        <div class="stage-title">Login & Navigation</div>
+        <div class="stage-subtitle">Access the system with your credentials and understand the top navigation.</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-list-ol"></i> Steps</div>
+        <div class="steps">
+          <div class="step"><div class="step-num">1</div><div class="step-text">Go to the app URL and enter your <strong>username</strong> and <strong>password</strong>.</div></div>
+          <div class="step"><div class="step-num">2</div><div class="step-text">After login, you land on the <strong>Job Orders dashboard</strong>.</div></div>
+          <div class="step"><div class="step-num">3</div><div class="step-text">Use the <strong>top nav</strong> to switch between Dashboard, My Work Orders, and Admin (if admin).</div></div>
+          <div class="step"><div class="step-num">4</div><div class="step-text">Click the <strong>a360 logo</strong> at any time to return to the dashboard.</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-shield-halved"></i> Roles</div>
+        <div class="rules">
+          <div class="rule"><i class="fa-solid fa-crown" style="color:#6366f1;"></i><span><strong>Admin</strong> — can create Job Orders, Work Orders, manage customers, users, and send reports.</span></div>
+          <div class="rule"><i class="fa-solid fa-user" style="color:#22c55e;"></i><span><strong>User</strong> — can start, pause, resume, and finish assigned Work Orders from My Work.</span></div>
+          <div class="rule"><i class="fa-solid fa-stopwatch" style="color:#f59e0b;"></i><span>An active timer shows in the top bar when a work order is running.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─────────────── STAGE 02 ─────────────── -->
+  <div class="stage-section" id="s2">
+    <div class="stage-header">
+      <div class="stage-number">02</div>
+      <div class="stage-info">
+        <div class="stage-role-badge badge-all"><i class="fa-solid fa-users"></i> All Users</div>
+        <div class="stage-title">Job Orders Dashboard</div>
+        <div class="stage-subtitle">The main view — see all job orders, their status, duration, and customer.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-list-ol"></i> What you see</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Each <strong>Job Order card</strong> shows: title, JB-XXXX ID, customer, priority, status badge, and total time worked.</div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Use <strong>Search</strong> to filter by title or customer name.</div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Filter by <strong>Open</strong> or <strong>Closed</strong> using the tab buttons.</div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text"><strong>Click any card</strong> to open the Job Order detail and see all its Work Orders.</div></div>
+      </div>
+    </div>
+
+    <div class="ui-mock">
+      <div class="mock-bar">
+        <div class="mock-dot" style="background:#ff5f57;"></div>
+        <div class="mock-dot" style="background:#febc2e;"></div>
+        <div class="mock-dot" style="background:#28c840;"></div>
+        <span class="mock-bar-title">Job Orders Dashboard</span>
+      </div>
+      <div class="mock-body">
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+          <div style="flex:1; min-width:220px; background:#1a1d2e; border:1px solid #2a2d3e; border-radius:10px; padding:1rem;">
+            <div style="font-size:0.7rem; color:#6366f1; font-weight:700; margin-bottom:4px;">JB-0099</div>
+            <div style="font-size:0.9rem; color:#e2e8f0; font-weight:700; margin-bottom:6px;">FADHIL TEST</div>
+            <div style="font-size:0.72rem; color:#94a3b8; margin-bottom:8px;">Customer: a360-test</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:0.68rem; background:#22c55e22; color:#22c55e; border:1px solid #22c55e44; padding:2px 8px; border-radius:10px; font-weight:700;">OPEN</span>
+              <span style="font-size:0.78rem; color:#818cf8; font-weight:700;">2h 22m</span>
+            </div>
+          </div>
+          <div style="flex:1; min-width:220px; background:#1a1d2e; border:1px solid #2a2d3e; border-radius:10px; padding:1rem; opacity:0.6;">
+            <div style="font-size:0.7rem; color:#6366f1; font-weight:700; margin-bottom:4px;">JB-0097</div>
+            <div style="font-size:0.9rem; color:#e2e8f0; font-weight:700; margin-bottom:6px;">SP-PIR Scheduling</div>
+            <div style="font-size:0.72rem; color:#94a3b8; margin-bottom:8px;">Customer: SadaWater</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:0.68rem; background:#6366f122; color:#818cf8; border:1px solid #6366f144; padding:2px 8px; border-radius:10px; font-weight:700;">OPEN</span>
+              <span style="font-size:0.78rem; color:#818cf8; font-weight:700;">5h 44m</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─────────────── STAGE 03 ─────────────── -->
+  <div class="stage-section" id="s3">
+    <div class="stage-header">
+      <div class="stage-number">03</div>
+      <div class="stage-info">
+        <div class="stage-role-badge badge-admin"><i class="fa-solid fa-crown"></i> Admin Only</div>
+        <div class="stage-title">Creating a Job Order</div>
+        <div class="stage-subtitle">Admins create Job Orders and define the initial scope of work inline.</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-list-ol"></i> Steps</div>
+        <div class="steps">
+          <div class="step"><div class="step-num">1</div><div class="step-text">Click the <strong>+ New Job Order</strong> button on the dashboard.</div></div>
+          <div class="step"><div class="step-num">2</div><div class="step-text">Fill in: <strong>Title</strong>, <strong>Customer</strong>, <strong>Description</strong>, and optionally assign to a user.</div></div>
+          <div class="step"><div class="step-num">3</div><div class="step-text">Click <strong>"+ Add Work Order"</strong> at the bottom to add task descriptions inline.</div></div>
+          <div class="step"><div class="step-num">4</div><div class="step-text">Click <strong>Create Job Order</strong> — the JO and all Work Orders are created automatically.</div></div>
+        </div>
+        <div class="tip"><i class="fa-solid fa-lightbulb"></i> Work Orders are created as <strong>Open / Pending</strong> — no user assigned yet. Users claim them by clicking Start.</div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-circle-info"></i> Fields</div>
+        <div class="rules">
+          <div class="rule"><i class="fa-solid fa-heading" style="color:#6366f1;"></i><span><strong>Title</strong> — short name for the job (required)</span></div>
+          <div class="rule"><i class="fa-solid fa-building" style="color:#6366f1;"></i><span><strong>Customer</strong> — linked customer name for report emails</span></div>
+          <div class="rule"><i class="fa-solid fa-align-left" style="color:#6366f1;"></i><span><strong>Description</strong> — optional context for the job</span></div>
+          <div class="rule"><i class="fa-solid fa-user" style="color:#6366f1;"></i><span><strong>Assigned To</strong> — leave as <em>Open</em> if no lead yet</span></div>
+          <div class="rule"><i class="fa-solid fa-list" style="color:#6366f1;"></i><span><strong>Work Orders</strong> — add task descriptions; estimate set later by worker</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─────────────── STAGE 04 ─────────────── -->
+  <div class="stage-section" id="s4">
+    <div class="stage-header">
+      <div class="stage-number">04</div>
+      <div class="stage-info">
+        <div class="stage-role-badge badge-all"><i class="fa-solid fa-users"></i> Admin + Users</div>
+        <div class="stage-title">Managing Work Orders</div>
+        <div class="stage-subtitle">Users start, track, and complete their Work Orders. Admins oversee and can delete.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="card-title"><i class="fa-solid fa-arrow-right-arrow-left"></i> Status Flow</div>
+      <div class="status-flow" style="margin-top:0.25rem;">
+        <span class="status-pill s-pending">Pending / Open</span>
+        <span class="arrow">→</span>
+        <span class="status-pill s-started">Started</span>
+        <span class="arrow">⇄</span>
+        <span class="status-pill s-paused">Paused</span>
+        <span class="arrow">→</span>
+        <span class="status-pill s-done">Completed</span>
+      </div>
+    </div>
+
+    <div class="ui-mock" style="margin-bottom:1rem;">
+      <div class="mock-bar">
+        <div class="mock-dot" style="background:#ff5f57;"></div>
+        <div class="mock-dot" style="background:#febc2e;"></div>
+        <div class="mock-dot" style="background:#28c840;"></div>
+        <span class="mock-bar-title">Job Detail → Work Orders</span>
+      </div>
+      <div class="mock-body">
+        <div class="mock-wo-row">
+          <div class="mock-wo-id">WIP-0378</div>
+          <div class="mock-wo-desc">POINT ONE</div>
+          <span class="mock-badge mock-badge-open">OPEN</span>
+          <span class="mock-btn mock-btn-purple"><i class="fa-solid fa-play" style="font-size:0.6rem;"></i> Start</span>
+        </div>
+        <div class="mock-wo-row">
+          <div class="mock-wo-id">WIP-0379</div>
+          <div class="mock-wo-desc">POINT TWO</div>
+          <span class="mock-badge mock-badge-prog">IN PROGRESS</span>
+          <span class="mock-btn mock-btn-outline"><i class="fa-solid fa-pause" style="font-size:0.6rem;"></i> Pause</span>
+          <span class="mock-btn mock-btn-green"><i class="fa-solid fa-check" style="font-size:0.6rem;"></i> Finish</span>
+        </div>
+        <div class="mock-wo-row">
+          <div class="mock-wo-id">WIP-0380</div>
+          <div class="mock-wo-desc">POINT 3</div>
+          <span class="mock-badge mock-badge-done">COMPLETED</span>
+          <span style="font-size:0.65rem; color:#22c55e; font-weight:700;">✓ DONE</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-hourglass-half"></i> Estimate Time</div>
+        <div class="rules">
+          <div class="rule"><i class="fa-solid fa-pen" style="color:#6366f1;"></i><span>Set directly on the work order card using the <strong>hr + min</strong> inline inputs.</span></div>
+          <div class="rule"><i class="fa-solid fa-floppy-disk" style="color:#6366f1;"></i><span>Auto-saves when you click away (no save button needed).</span></div>
+          <div class="rule"><i class="fa-solid fa-user" style="color:#6366f1;"></i><span>Set by the <strong>worker</strong>, not the admin at creation.</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-vial"></i> Tested Status</div>
+        <div class="chips">
+          <span class="chip chip-slate">● Not Tested</span>
+          <span class="chip chip-amber">● Testing</span>
+          <span class="chip chip-green">● Pass</span>
+          <span class="chip chip-red">● Needs Fix</span>
+        </div>
+        <div class="tip" style="margin-top:0.75rem;"><i class="fa-solid fa-lightbulb"></i> Click the pill on the card to change tested status — it auto-saves instantly.</div>
+      </div>
+    </div>
+
+    <div class="warn"><i class="fa-solid fa-triangle-exclamation"></i> Only <strong>Admins</strong> can delete a Work Order (trash icon on each card). This action cannot be undone.</div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─────────────── STAGE 05 ─────────────── -->
+  <div class="stage-section" id="s5">
+    <div class="stage-header">
+      <div class="stage-number">05</div>
+      <div class="stage-info">
+        <div class="stage-role-badge badge-user"><i class="fa-solid fa-user"></i> Users (Admin sees all)</div>
+        <div class="stage-title">My Work Orders</div>
+        <div class="stage-subtitle">Your personal dashboard showing only your assigned tasks, with full controls.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-list-ol"></i> How to use</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Click <strong>"My Work Orders"</strong> in the top navigation bar.</div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Switch between <strong>All My Work</strong>, <strong>In Progress</strong>, and <strong>Completed</strong> tabs.</div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Use the search bar, Job Order filter, or date picker to narrow down tasks.</div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Use <strong>Pause / Resume / Finish</strong> action buttons directly in the table — no need to open a modal.</div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text"><strong>Open</strong> work orders (unassigned) appear with a Start button — click it to claim and begin.</div></div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-table-columns"></i> Table Columns</div>
+        <div class="rules">
+          <div class="rule"><span style="font-family:monospace; font-size:0.78rem; color:#6366f1; font-weight:700;">ID</span><span>Work order reference number (WIP-XXXX)</span></div>
+          <div class="rule"><i class="fa-solid fa-align-left" style="color:#94a3b8;"></i><span>Description of the task</span></div>
+          <div class="rule"><i class="fa-solid fa-briefcase" style="color:#94a3b8;"></i><span>Linked Job Order name</span></div>
+          <div class="rule"><i class="fa-solid fa-hourglass" style="color:#94a3b8;"></i><span>Est. Time set by worker</span></div>
+          <div class="rule"><i class="fa-solid fa-clock" style="color:#94a3b8;"></i><span>Time Taken (live for active tasks)</span></div>
+          <div class="rule"><i class="fa-solid fa-vial" style="color:#94a3b8;"></i><span>Tested status badge</span></div>
+          <div class="rule"><i class="fa-solid fa-user" style="color:#94a3b8;"></i><span>Assigned To / Open badge</span></div>
+          <div class="rule"><i class="fa-solid fa-play" style="color:#94a3b8;"></i><span>Action buttons (Start / Pause / Finish)</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-circle-info"></i> Visibility Rules</div>
+        <div class="rules">
+          <div class="rule"><i class="fa-solid fa-user" style="color:#22c55e;"></i><span><strong>Users</strong> see their own assigned tasks + all Open work orders</span></div>
+          <div class="rule"><i class="fa-solid fa-crown" style="color:#6366f1;"></i><span><strong>Admins</strong> see all 160+ work orders across all users</span></div>
+          <div class="rule"><i class="fa-solid fa-tag" style="color:#6366f1;"></i><span>If you're <em>Tagged</em> as a collaborator, the WO also appears in your list</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─────────────── STAGE 06 ─────────────── -->
+  <div class="stage-section" id="s6">
+    <div class="stage-header">
+      <div class="stage-number">06</div>
+      <div class="stage-info">
+        <div class="stage-role-badge badge-admin"><i class="fa-solid fa-crown"></i> Admin</div>
+        <div class="stage-title">Progress Reports & Sign-Off</div>
+        <div class="stage-subtitle">Send email reports to customers and team members from inside a Job Order.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-list-ol"></i> How to send a report</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Open a Job Order from the dashboard.</div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Scroll to the bottom and click the <strong>Send Report</strong> button in the footer.</div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">The system automatically sends to: <strong>Customer emails</strong> + all <strong>workers</strong> on the job + <strong>you</strong> (the sender).</div></div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-file-lines"></i> Progress Report</div>
+        <div class="rules">
+          <div class="rule"><i class="fa-solid fa-check" style="color:#6366f1;"></i><span>Sent when some work orders are <strong>still in progress</strong></span></div>
+          <div class="rule"><i class="fa-solid fa-table" style="color:#6366f1;"></i><span>Shows: ID, Description, Est. Time, Time Taken, Tested, Status, Assigned To</span></div>
+          <div class="rule"><i class="fa-solid fa-clock" style="color:#6366f1;"></i><span>Includes Total Time Worked at the bottom</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-file-signature"></i> Job Sign-Off Email</div>
+        <div class="rules">
+          <div class="rule"><i class="fa-solid fa-circle-check" style="color:#22c55e;"></i><span>Triggered <strong>automatically</strong> when ALL work orders are completed</span></div>
+          <div class="rule"><i class="fa-solid fa-heading" style="color:#22c55e;"></i><span>Title changes to <strong>"Job Sign-Off"</strong> — signals project completion</span></div>
+          <div class="rule"><i class="fa-solid fa-envelope" style="color:#22c55e;"></i><span>Same recipients: customer + team + sender</span></div>
+        </div>
+        <div class="tip"><i class="fa-solid fa-lightbulb"></i> The system detects completion automatically — you just click the same Send Report button.</div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ─────────────── STAGE 07 ─────────────── -->
+  <div class="stage-section" id="s7">
+    <div class="stage-header">
+      <div class="stage-number">07</div>
+      <div class="stage-info">
+        <div class="stage-role-badge badge-admin"><i class="fa-solid fa-crown"></i> Admin Only</div>
+        <div class="stage-title">Admin Panel</div>
+        <div class="stage-subtitle">Manage users, customers, and view job order summaries and analytics.</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-users-gear"></i> User Management</div>
+        <div class="steps">
+          <div class="step"><div class="step-num">1</div><div class="step-text">Click <strong>Admin</strong> in the top nav to open the Admin panel.</div></div>
+          <div class="step"><div class="step-num">2</div><div class="step-text">Use the <strong>Users tab</strong> to register new accounts with name, username, password, and role.</div></div>
+          <div class="step"><div class="step-num">3</div><div class="step-text">Set a <strong>color code</strong> per user — shown as their avatar color across the app.</div></div>
+          <div class="step"><div class="step-num">4</div><div class="step-text">Assign roles: <strong>Admin</strong> or <strong>User</strong>.</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fa-solid fa-building-user"></i> Customer Management</div>
+        <div class="steps">
+          <div class="step"><div class="step-num">1</div><div class="step-text">Switch to the <strong>Customers tab</strong> in the Admin panel.</div></div>
+          <div class="step"><div class="step-num">2</div><div class="step-text">Add customers with a name and one or more <strong>email addresses</strong>.</div></div>
+          <div class="step"><div class="step-num">3</div><div class="step-text">Use the <strong>pencil icon</strong> to edit an existing customer's name or emails.</div></div>
+          <div class="step"><div class="step-num">4</div><div class="step-text">Customer emails are used automatically when sending progress reports.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-chart-bar"></i> Job Summaries Tab</div>
+      <div class="rules">
+        <div class="rule"><i class="fa-solid fa-eye" style="color:#6366f1;"></i><span>Shows a flat list of all job orders with total time worked, work order count, and status.</span></div>
+        <div class="rule"><i class="fa-solid fa-file-pdf" style="color:#6366f1;"></i><span>Each job has a <strong>print/PDF</strong> button to export a brief summary.</span></div>
+        <div class="rule"><i class="fa-solid fa-calendar" style="color:#6366f1;"></i><span>Use the <strong>Daily Report</strong> button to email each team member their daily time log.</span></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+<!-- FOOTER -->
+<footer>
+  <strong>a360 Job Order System</strong> · Internal User Guide<br>
+  <span style="margin-top:0.3rem; display:block;">© 2026 a360. All rights reserved.</span>
+</footer>
+
+<script>
+  // Highlight active nav link on scroll
+  const sections = document.querySelectorAll('.stage-section');
+  const navLinks = document.querySelectorAll('.nav-links a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`.nav-links a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
