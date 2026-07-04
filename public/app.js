@@ -1367,6 +1367,7 @@ function buildTimelineHTML(woId, timeIn, timeOut, serverHistory) {
 }
 
 function renderWorkOrders(workOrders) {
+    window._lastRenderedWorkOrders = workOrders;
     const list = document.getElementById('work-orders-list');
     list.innerHTML = '';
     
@@ -1464,7 +1465,11 @@ function renderWorkOrders(workOrders) {
             <div class="work-item-top">
                 <div class="work-info">
                     <span class="work-desc">${wo.description || 'No description'}</span>
-                    <span class="work-meta">${wo.id} | ${workDate}${startDate ? ` | ${timeIn} &rarr; ${timeOut}` : ''}</span>
+                    <span class="work-meta">
+                        ${wo.id}
+                        <button onclick="copyWorkOrderDetails('${wo.id}')" title="Copy ID" style="background:none;border:none;cursor:pointer;padding:0 3px;color:#6366f1;font-size:0.8rem;vertical-align:middle;opacity:0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'"><i class="fa-regular fa-copy"></i></button>
+                        | ${workDate}${startDate ? ` | ${timeIn} &rarr; ${timeOut}` : ''}
+                    </span>
                     <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; margin-top:4px;">
                         <span class="work-hours"><i class="fa-regular fa-clock"></i> Worked: <strong>${workedStr}</strong></span>
                         ${inlineEstHTML}
@@ -1740,6 +1745,12 @@ window.deleteWorkOrder = async function(woId) {
     } catch {
         showToast('Failed to delete work order.', 'error');
     }
+};
+
+window.copyWorkOrderDetails = function(woId) {
+    navigator.clipboard.writeText(woId)
+        .then(() => showToast('Work order ID copied!', 'success'))
+        .catch(() => showToast('Failed to copy.', 'error'));
 };
 
 window.toggleWorkOrderPause = async function(workOrderId, currentStatus) {
@@ -2971,6 +2982,7 @@ async function loadMyWorkDashboard(filter = 'all') {
 }
 
 function renderMyWorkOrders(workOrders) {
+    window._lastRenderedWorkOrders = (window._lastRenderedWorkOrders || []).filter(w => !workOrders.find(x => x.id === w.id)).concat(workOrders);
     const container = document.getElementById('mywork-orders-list');
     container.innerHTML = '';
 
