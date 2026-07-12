@@ -298,11 +298,11 @@ async function sendProgressReport(jobOrderId, requesterId) {
         ? `Job Sign-Off: ${jobOrder.title} [${jobOrder.id}]`
         : `Project Progress Report: ${jobOrder.title} [${jobOrder.id}]`;
 
-    // Send to all recipients
-    for (const email of validRecipients) {
+    // Send to all recipients in parallel
+    await Promise.all(validRecipients.map(email => {
         console.log(`Sending progress report to: ${email}`);
-        await sendEmail(email, subject, html, attachments);
-    }
+        return sendEmail(email, subject, html, attachments);
+    }));
 
     return { success: true, recipientCount: validRecipients.length, recipients: validRecipients };
 }

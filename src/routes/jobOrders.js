@@ -47,7 +47,7 @@ async function attachUsersToWorkOrders(jobOrders) {
 router.get('/', async (req, res) => {
     const { data, error } = await supabase
         .from('job_orders')
-        .select('*, assigned_by_user:users!job_orders_assigned_by_fkey(name), assigned_to_user:users!job_orders_assigned_to_fkey(name), work_orders(*)')
+        .select('*, assigned_by_user:users!job_orders_assigned_by_fkey(name), work_orders(*)')
         .order('created_at', { ascending: false });
 
     if (error) return res.status(500).json({ error: error.message });
@@ -59,7 +59,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
     const { data, error } = await supabase
         .from('job_orders')
-        .select('*, assigned_by_user:users!job_orders_assigned_by_fkey(name), assigned_to_user:users!job_orders_assigned_to_fkey(name), work_orders(*)')
+        .select('*, assigned_by_user:users!job_orders_assigned_by_fkey(name), work_orders(*)')
         .eq('id', req.params.id)
         .single();
 
@@ -71,7 +71,7 @@ router.get('/:id', async (req, res) => {
 
 // POST new job order
 router.post('/', async (req, res) => {
-    const { title, description, customer_name, status, assigned_by, assigned_to, priority } = req.body;
+    const { title, description, customer_name, status, assigned_by, assigned_to_ids, priority } = req.body;
 
     if (!title) {
         return res.status(400).json({ error: 'Title is required' });
@@ -89,7 +89,7 @@ router.post('/', async (req, res) => {
                 customer_name,
                 status: status || 'open',
                 assigned_by,
-                assigned_to,
+                assigned_to_ids: assigned_to_ids || [],
                 priority
             }])
             .select();
@@ -152,7 +152,7 @@ router.post('/:id/complete', async (req, res) => {
 
 // PUT update job order
 router.put('/:id', async (req, res) => {
-    const { title, description, customer_name, status, assigned_by, assigned_to, priority } = req.body;
+    const { title, description, customer_name, status, assigned_by, assigned_to_ids, priority } = req.body;
 
     const { data, error } = await supabase
         .from('job_orders')
@@ -162,7 +162,7 @@ router.put('/:id', async (req, res) => {
             customer_name,
             status,
             assigned_by,
-            assigned_to,
+            assigned_to_ids,
             priority,
             updated_at: new Date()
         })

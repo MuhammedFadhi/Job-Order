@@ -242,7 +242,7 @@ function setupEventListeners() {
 
     // Modals
     document.getElementById('btn-new-job').addEventListener('click', () => {
-        populateUserDropdown('nj-assigned');
+        populateAssigneeList('nj-assigned-list');
         document.getElementById('nj-work-orders-list').innerHTML = ''; // clear leftover rows
         openModal(modals.newJob);
     });
@@ -690,10 +690,23 @@ async function loadDashboard() {
 
     try {
         const res = await fetch(`${API_BASE}/job-orders`);
-        const jobs = await res.json();
-        
+        let jobs = await res.json();
+
+        // Admins see all job orders; regular users only see ones they're assigned to,
+        // ones they created, or unassigned/open jobs.
+        const isAdmin = currentUser && currentUser.role === 'Admin';
+        if (!isAdmin && currentUser) {
+            jobs = jobs.filter(job => {
+                const assignedIds = Array.isArray(job.assigned_to_ids) ? job.assigned_to_ids : [];
+                const isAssigned = assignedIds.includes(currentUser.id);
+                const isCreator = job.assigned_by === currentUser.id;
+                const isUnassigned = assignedIds.length === 0;
+                return isAssigned || isCreator || isUnassigned;
+            });
+        }
+
         activeContainer.innerHTML = ''; // Clear loader
-        
+
         if(jobs.length === 0) {
             activeContainer.innerHTML = '<p class="text-muted" style="grid-column: 1/-1;">No job orders available. Create one to get started.</p>';
             completedContainer.innerHTML = '<p class="text-muted" style="grid-column: 1/-1;">No completed job orders.</p>';
@@ -777,7 +790,7 @@ function createJobCard(job) {
             <span>${getPriorityHTML(job.priority)}</span>
         </div>
         <div class="job-card-meta">
-            <span><i class="fa-regular fa-user"></i> ${job.assigned_to_user ? job.assigned_to_user.name : 'Unassigned'}</span>
+            <span><i class="fa-regular fa-user"></i> ${getAssignedNamesHTML(job)}</span>
             <span><i class="fa-regular fa-calendar"></i> ${formatDateDDMMYYYY(job.created_at)}</span>
         </div>
         <div class="job-card-meta" style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.05);">
@@ -870,7 +883,7 @@ function createJobListItem(job) {
             <i class="fa-solid fa-building"></i> <span>${job.customer_name}</span>
         </div>
         <div class="list-meta">
-            <i class="fa-regular fa-user"></i> <span>${job.assigned_to_user ? job.assigned_to_user.name : 'Unassigned'}</span>
+            <i class="fa-regular fa-user"></i> <span>${getAssignedNamesHTML(job)}</span>
         </div>
         <div class="list-meta" style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">
             <i class="fa-solid fa-clock"></i> <span>${formatDuration(totalMs)}</span>
@@ -901,15 +914,50 @@ function populateUserDropdown(selectId) {
     });
 }
 
+function populateAssigneeList(containerId, selectedIds = []) {
+    const list = document.getElementById(containerId);
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (allUsers.length === 0) {
+        list.innerHTML = '<p class="text-muted" style="grid-column: 1/-1; font-size: 0.8rem;">No users available.</p>';
+        return;
+    }
+
+    allUsers.forEach(u => {
+        const initials = u.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        const userColor = u.color_code ? `style="background: ${u.color_code};"` : '';
+        const checked = selectedIds.includes(u.id) ? 'checked' : '';
+
+        const div = document.createElement('label');
+        div.className = 'tag-option';
+        div.innerHTML = `
+            <input type="checkbox" value="${u.id}" ${checked}>
+            <div class="mini-avatar" ${userColor} style="width: 20px; height: 20px; font-size: 9px;">${initials}</div>
+            <span>${u.name}</span>
+        `;
+        list.appendChild(div);
+    });
+}
+
+function getAssignedNamesHTML(job) {
+    const ids = Array.isArray(job.assigned_to_ids) ? job.assigned_to_ids : [];
+    const names = ids.map(id => allUsers.find(u => u.id === id)?.name).filter(Boolean);
+    return names.length ? names.join(', ') : 'Unassigned';
+}
+
 // --- Job Order CRUD ---
 
 async function handleCreateJob(e) {
     e.preventDefault();
 
+    const assignedToIds = Array.from(document.querySelectorAll('#nj-assigned-list input:checked'))
+        .map(cb => cb.value);
+
     const payload = {
         title: document.getElementById('nj-title').value,
         customer_name: document.getElementById('nj-customer').value,
-        assigned_to: document.getElementById('nj-assigned').value || null,
+        assigned_to_ids: assignedToIds,
         assigned_by: currentUser.id,
         description: document.getElementById('nj-desc').value,
         status: 'open'
@@ -978,7 +1026,7 @@ async function openJobDetail(jobId) {
         // Meta Summary
         document.getElementById('jd-customer').textContent = currentJobOrder.customer_name;
         document.getElementById('jd-priority').innerHTML = getPriorityHTML(currentJobOrder.priority);
-        document.getElementById('jd-assigned').textContent = currentJobOrder.assigned_to_user ? currentJobOrder.assigned_to_user.name : 'Unassigned';
+        document.getElementById('jd-assigned').textContent = getAssignedNamesHTML(currentJobOrder);
         document.getElementById('jd-date').textContent = formatDateDDMMYYYY(currentJobOrder.created_at);
         document.getElementById('jd-desc').textContent = currentJobOrder.description || 'No description provided.';
         
@@ -1029,10 +1077,7 @@ async function openEditJobModal(jobId) {
         document.getElementById('ej-priority').value = job.priority || 3;
         document.getElementById('ej-desc').value = job.description || '';
         
-        populateUserDropdown('ej-assigned');
-        if (job.assigned_to) {
-            document.getElementById('ej-assigned').value = job.assigned_to;
-        }
+        populateAssigneeList('ej-assigned-list', job.assigned_to_ids || []);
 
         openModal(modals.editJob);
     } catch (err) {
@@ -1044,11 +1089,14 @@ async function handleUpdateJob(e) {
     e.preventDefault();
     const jobId = document.getElementById('ej-id').value;
     
+    const assignedToIds = Array.from(document.querySelectorAll('#ej-assigned-list input:checked'))
+        .map(cb => cb.value);
+
     const payload = {
         title: document.getElementById('ej-title').value,
         customer_name: document.getElementById('ej-customer').value,
         priority: parseInt(document.getElementById('ej-priority').value),
-        assigned_to: document.getElementById('ej-assigned').value || null,
+        assigned_to_ids: assignedToIds,
         description: document.getElementById('ej-desc').value,
         status: currentJobOrder.status // Keep current status
     };
@@ -1178,8 +1226,8 @@ function calcWorkedTime(woId, timeIn, timeOut, serverHistory, woUserId, woStatus
     let history = [];
     const isOwner = currentUser && (woUserId === currentUser.id);
 
-    if (isOwner) {
-        // For the owner, trust local history if it's more advanced (optimistic)
+    if (isOwner && woStatus !== 'completed') {
+        // For the owner of an in-progress WO, trust local history if it's more advanced (optimistic)
         if (!serverHistory || serverHistory.length === 0) {
             history = localHistory;
         } else if (localHistory.length === 0) {
@@ -1194,10 +1242,11 @@ function calcWorkedTime(woId, timeIn, timeOut, serverHistory, woUserId, woStatus
             }
         }
     } else {
-        // For non-owners (including Admins viewing others), trust ONLY the server history
+        // Completed WOs (and non-owners) are finalized — always trust server history,
+        // never the local optimistic cache which may be stale (e.g. edited timestamps).
         history = serverHistory || [];
     }
-    
+
     // Fallback for simple calculation if no history exists (legacy or direct API data)
     if (history.length === 0) {
         if (timeOut) return Math.max(0, new Date(timeOut).getTime() - new Date(timeIn).getTime());
@@ -1248,7 +1297,7 @@ function calcDailyWorkedTime(woId, timeIn, timeOut, serverHistory, woUserId, woS
     let history = [];
     const isOwner = currentUser && (woUserId === currentUser.id);
 
-    if (isOwner) {
+    if (isOwner && woStatus !== 'completed') {
         if (!serverHistory || serverHistory.length === 0) history = localHistory;
         else if (localHistory.length === 0) history = serverHistory;
         else {
@@ -1361,7 +1410,20 @@ function buildTimelineHTML(woId, timeIn, timeOut, serverHistory) {
             ${getEditBtn('history', idx, entry.at)}
         </div>`;
     });
-    
+
+    // Fallback Finished event: some work orders were completed without an
+    // 'end' history entry (e.g. bulk job completion before that was tracked).
+    // Synthesize one from time_out so the timeline still shows it.
+    const hasEndEvent = history.some(entry => entry.type === 'end');
+    if (!hasEndEvent && timeOut) {
+        html += `<div class="pipeline-event pipeline-end">
+            <span class="pipeline-dot dot-end"></span>
+            <span class="pipeline-label">Finished</span>
+            <span class="pipeline-time">${fmtTime(new Date(timeOut).getTime())}</span>
+            ${getEditBtn('end', -1, new Date(timeOut).getTime())}
+        </div>`;
+    }
+
     html += '</div>';
     return html;
 }
@@ -1736,6 +1798,11 @@ window.deleteWorkOrder = async function(woId) {
     try {
         const res = await fetch(`${API_BASE}/work-orders/${woId}`, { method: 'DELETE' });
         if (res.ok) {
+            // Purge cached local pause state so a future reused ID doesn't inherit this WO's history
+            const pauseState = getPauseState();
+            delete pauseState[woId];
+            savePauseState(pauseState);
+
             showToast('Work order deleted.', 'success');
             if (currentJobOrder) openJobDetail(currentJobOrder.id);
             loadDashboard();
@@ -1839,6 +1906,9 @@ async function handleUpdateTimeEntry(e) {
 
         if (type === 'start') {
             payload.time_in = new Date(newTimestamp).toISOString();
+        } else if (type === 'end') {
+            // Synthesized Finished event (no matching pause_history entry) — edit time_out directly
+            payload.time_out = new Date(newTimestamp).toISOString();
         } else {
             const history = wo.pause_history || [];
             if (history[index]) {
@@ -1861,6 +1931,12 @@ async function handleUpdateTimeEntry(e) {
         });
 
         if (res.ok) {
+            // Drop the locally cached pause state for this WO so stale local
+            // history can't outrank the timestamp we just corrected on the server
+            const pauseState = getPauseState();
+            delete pauseState[woId];
+            savePauseState(pauseState);
+
             showToast('Timestamp updated and recalculated.', 'success');
             closeModal(modals.editTimeEntry);
             if (currentJobOrder) openJobDetail(currentJobOrder.id);
@@ -1902,25 +1978,48 @@ async function handleCloseJobOrder() {
         confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
 
         try {
-            // Single server call — bulk-completes all WOs + closes job atomically
-            const res = await fetch(`${API_BASE}/job-orders/${currentJobOrder.id}/complete`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            });
+            const jobId = currentJobOrder.id;
+            const now = Date.now();
+            const nowIso = new Date(now).toISOString();
 
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.error || 'Failed');
+            // 1. Mark all work orders as completed + tested: pass
+            for (const wo of workOrders) {
+                if (wo.status === 'completed') continue;
+
+                // Record an 'end' event so the timeline shows a Finished entry
+                const history = (wo.pause_history || []).slice();
+                history.push({ type: 'end', at: now });
+
+                const pauseState = getPauseState();
+                delete pauseState[wo.id];
+                savePauseState(pauseState);
+
+                const r = await fetch(`${API_BASE}/work-orders/${wo.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'completed', tested: 'pass', time_out: nowIso, pause_history: history })
+                });
+                if (!r.ok) {
+                    const e = await r.json().catch(() => ({}));
+                    throw new Error(e.error || `Failed to update ${wo.id}`);
+                }
             }
+
+            // 2. Close the job
+            const closeRes = await fetch(`${API_BASE}/job-orders/${jobId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'closed' })
+            });
+            if (!closeRes.ok) throw new Error('Failed to close job');
 
             document.getElementById('complete-job-modal').classList.add('hidden');
             showToast('Job marked as complete! All work orders set to Pass.', 'success');
 
-            // Re-fetch job with updated WO data for email step
-            const jobRes = await fetch(`${API_BASE}/job-orders/${currentJobOrder.id}`);
+            // 3. Re-fetch job with updated data for email step
+            const jobRes = await fetch(`${API_BASE}/job-orders/${jobId}`);
             const updatedJob = await jobRes.json();
 
-            // Step 2: Show email recipients with fresh data
             await showCompleteEmailStep(updatedJob);
             loadDashboard();
 
@@ -1966,7 +2065,7 @@ async function showCompleteEmailStep(jobOrder) {
         const customers = await res.json();
         const customer = customers.find(c => c.name === jobOrder.customer_name);
         (customer?.emails || []).forEach(e => {
-            if (e?.trim()) addRecipient(e.trim(), e.trim(), 'client');
+            if (e?.trim()) addRecipient(e.trim(), 'Client', 'client');
         });
     } catch { /* no client emails */ }
 

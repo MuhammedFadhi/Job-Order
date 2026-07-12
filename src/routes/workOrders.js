@@ -128,7 +128,7 @@ router.put('/:id/start', async (req, res) => {
 
 // PUT update work order
 router.put('/:id', async (req, res) => {
-    const { status, description, time_out, pause_history, estimate_time, tested, user_id } = req.body;
+    const { status, description, time_in, time_out, pause_history, estimate_time, tested, user_id } = req.body;
 
     let updatedTimeOut = time_out;
     if (status === 'completed' && !time_out) {
@@ -143,6 +143,7 @@ router.put('/:id', async (req, res) => {
         updated_at: new Date()
     };
 
+    if (time_in !== undefined) updateFields.time_in = time_in;
     if (estimate_time !== undefined) updateFields.estimate_time = estimate_time;
     if (tested !== undefined) updateFields.tested = tested;
     if (user_id !== undefined) updateFields.user_id = user_id;
