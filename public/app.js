@@ -1048,7 +1048,7 @@ async function handleUpdateJob(e) {
         title: document.getElementById('ej-title').value,
         customer_name: document.getElementById('ej-customer').value,
         priority: parseInt(document.getElementById('ej-priority').value),
-        assigned_to: document.getElementById('ej-assigned').value,
+        assigned_to: document.getElementById('ej-assigned').value || null,
         description: document.getElementById('ej-desc').value,
         status: currentJobOrder.status // Keep current status
     };
@@ -1874,25 +1874,152 @@ async function handleUpdateTimeEntry(e) {
 }
 
 async function handleCloseJobOrder() {
-    if(!currentJobOrder) return;
-    
-    try {
-        const res = await fetch(`${API_BASE}/job-orders/${currentJobOrder.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'closed' })
-        });
-        
-        if(res.ok) {
-            showToast('Job marked as Closed.', 'success');
-            closeModal(modals.jobDetail);
-            loadDashboard(); // Refresh background list
-        } else {
-            throw new Error('Failed');
-        }
-    } catch {
-        showToast('Error updating job order.', 'error');
+    if (!currentJobOrder) return;
+
+    const workOrders = currentJobOrder.work_orders || [];
+
+    // Populate Step 1 modal WO list
+    const woList = document.getElementById('cjm-wo-list');
+    if (workOrders.length === 0) {
+        woList.innerHTML = '<p style="color:#888; font-size:0.85rem;">No work orders in this job.</p>';
+    } else {
+        woList.innerHTML = workOrders.map(wo => `
+            <div style="display:flex; align-items:center; gap:0.6rem; padding:0.5rem 0.75rem; background:rgba(255,255,255,0.04); border-radius:8px; border:1px solid rgba(255,255,255,0.07);">
+                <i class="fa-solid fa-circle-check" style="color:#22c55e; font-size:0.85rem;"></i>
+                <span style="font-size:0.82rem; color:#aaa; font-family:monospace;">${wo.id}</span>
+                <span style="font-size:0.85rem; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${wo.description || 'No description'}</span>
+                <span style="font-size:0.75rem; color:#22c55e; font-weight:600;">→ Pass</span>
+            </div>
+        `).join('');
     }
+
+    document.getElementById('complete-job-modal').classList.remove('hidden');
+
+    // Confirm button handler
+    const confirmBtn = document.getElementById('cjm-confirm-btn');
+    confirmBtn.onclick = async () => {
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+
+        try {
+            // Single server call — bulk-completes all WOs + closes job atomically
+            const res = await fetch(`${API_BASE}/job-orders/${currentJobOrder.id}/complete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || 'Failed');
+            }
+
+            document.getElementById('complete-job-modal').classList.add('hidden');
+            showToast('Job marked as complete! All work orders set to Pass.', 'success');
+
+            // Re-fetch job with updated WO data for email step
+            const jobRes = await fetch(`${API_BASE}/job-orders/${currentJobOrder.id}`);
+            const updatedJob = await jobRes.json();
+
+            // Step 2: Show email recipients with fresh data
+            await showCompleteEmailStep(updatedJob);
+            loadDashboard();
+
+        } catch(err) {
+            showToast(err.message || 'Error completing job order.', 'error');
+        } finally {
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '<i class="fa-solid fa-check"></i> Confirm & Complete';
+        }
+    };
+}
+
+async function showCompleteEmailStep(jobOrder) {
+    // Build full recipient list (mirrors backend sendProgressReport logic)
+    const recipientSet = new Set();
+    const recipientRows = [];
+
+    function addRecipient(email, label, type) {
+        if (!email || !email.includes('@') || recipientSet.has(email)) return;
+        recipientSet.add(email);
+        recipientRows.push({ email, label, type });
+    }
+
+    // 1. Requester
+    if (currentUser?.username) addRecipient(currentUser.username, currentUser.name + ' (You)', 'requester');
+
+    // 2. All workers on each work order
+    const workOrders = jobOrder.work_orders || [];
+    workOrders.forEach(wo => {
+        if (wo.user_id) {
+            const u = allUsers.find(u => u.id === wo.user_id);
+            if (u?.username) addRecipient(u.username, u.name + ' (Lead)', 'worker');
+        }
+        (wo.tagged_user_ids || []).forEach(tId => {
+            const u = allUsers.find(u => u.id === tId);
+            if (u?.username) addRecipient(u.username, u.name + ' (Tagged)', 'worker');
+        });
+    });
+
+    // 3. Client emails
+    try {
+        const res = await fetch(`${API_BASE}/customers`);
+        const customers = await res.json();
+        const customer = customers.find(c => c.name === jobOrder.customer_name);
+        (customer?.emails || []).forEach(e => {
+            if (e?.trim()) addRecipient(e.trim(), e.trim(), 'client');
+        });
+    } catch { /* no client emails */ }
+
+    const colorMap = { requester: '#6366f1', worker: '#22c55e', client: '#f59e0b' };
+    const iconMap  = { requester: 'fa-user-shield', worker: 'fa-user', client: 'fa-building' };
+
+    const emailList = document.getElementById('cjm-email-list');
+    if (recipientRows.length === 0) {
+        emailList.innerHTML = '<p style="color:#f87171; font-size:0.85rem;"><i class="fa-solid fa-triangle-exclamation"></i> No email addresses found.</p>';
+    } else {
+        emailList.innerHTML = recipientRows.map(r => `
+            <div style="display:flex; align-items:center; gap:0.6rem; padding:0.45rem 0.75rem; background:rgba(255,255,255,0.04); border-radius:8px; border:1px solid rgba(255,255,255,0.07);">
+                <i class="fa-solid ${iconMap[r.type]}" style="color:${colorMap[r.type]}; font-size:0.78rem; width:14px; text-align:center;"></i>
+                <span style="font-size:0.82rem; color:#aaa; flex:1;">${r.label}</span>
+                <span style="font-size:0.78rem; color:#666; font-family:monospace;">${r.email}</span>
+            </div>
+        `).join('');
+    }
+
+    const emailModal = document.getElementById('complete-job-email-modal');
+    emailModal.classList.remove('hidden');
+
+    const skipBtn = document.getElementById('cjm-skip-btn');
+    const sendBtn = document.getElementById('cjm-send-btn');
+
+    skipBtn.onclick = () => {
+        emailModal.classList.add('hidden');
+        closeModal(modals.jobDetail);
+    };
+
+    sendBtn.onclick = async () => {
+        if (recipientRows.length === 0) { emailModal.classList.add('hidden'); closeModal(modals.jobDetail); return; }
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+        try {
+            const res = await fetch(`${API_BASE}/job-orders/${jobOrder.id}/send-report`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ requester_id: currentUser.id })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(`Sign-off report sent to ${data.recipientCount} recipient(s).`, 'success');
+            } else {
+                showToast(data.error || 'Failed to send report.', 'error');
+            }
+        } catch {
+            showToast('Failed to send report.', 'error');
+        } finally {
+            emailModal.classList.add('hidden');
+            closeModal(modals.jobDetail);
+        }
+    };
 }
 
 // Globally exposed for inline onclick on dashboard cards

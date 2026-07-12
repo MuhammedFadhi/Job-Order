@@ -310,6 +310,48 @@
             </div>
         </main>
 
+        <!-- Mark Job Complete — Step 1: Confirm -->
+        <div id="complete-job-modal" class="modal-overlay hidden" style="z-index:300;">
+            <div class="glass-card modal-content" style="max-width:520px;">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-circle-check" style="color:#22c55e;"></i> Mark Job Complete</h3>
+                    <button class="btn-close-modal btn-icon" onclick="document.getElementById('complete-job-modal').classList.add('hidden')"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div style="padding:1.25rem 1.5rem; display:flex; flex-direction:column; gap:1rem;">
+                    <p style="color:#aaa; font-size:0.9rem;">The following work orders will be automatically marked as <strong style="color:#22c55e;">Tested: Pass</strong> and <strong style="color:#22c55e;">Completed</strong>.</p>
+                    <div id="cjm-wo-list" style="display:flex; flex-direction:column; gap:0.5rem; max-height:240px; overflow-y:auto;"></div>
+                    <div style="background:rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.3); border-radius:10px; padding:0.75rem 1rem; font-size:0.85rem; color:#a5b4fc;">
+                        <i class="fa-solid fa-circle-info"></i> A sign-off report will be sent to the client after confirmation.
+                    </div>
+                    <div style="display:flex; justify-content:flex-end; gap:0.75rem; padding-top:0.25rem;">
+                        <button class="btn btn-secondary" onclick="document.getElementById('complete-job-modal').classList.add('hidden')">Cancel</button>
+                        <button class="btn btn-primary" id="cjm-confirm-btn" style="background:#22c55e; border-color:#22c55e;">
+                            <i class="fa-solid fa-check"></i> Confirm & Complete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mark Job Complete — Step 2: Send Email -->
+        <div id="complete-job-email-modal" class="modal-overlay hidden" style="z-index:300;">
+            <div class="glass-card modal-content" style="max-width:460px;">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-paper-plane" style="color:#6366f1;"></i> Send Sign-Off Report</h3>
+                </div>
+                <div style="padding:1.25rem 1.5rem; display:flex; flex-direction:column; gap:1rem;">
+                    <p style="color:#aaa; font-size:0.9rem;">Job marked as complete. The sign-off report will be sent to:</p>
+                    <div id="cjm-email-list" style="display:flex; flex-direction:column; gap:0.4rem;"></div>
+                    <div style="display:flex; justify-content:flex-end; gap:0.75rem; padding-top:0.25rem;">
+                        <button class="btn btn-secondary" id="cjm-skip-btn">Skip</button>
+                        <button class="btn btn-primary" id="cjm-send-btn">
+                            <i class="fa-solid fa-paper-plane"></i> Send Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Edit Customer Modal -->
         <div id="edit-customer-modal" class="modal-overlay hidden">
             <div class="glass-card modal-content" style="max-width:480px;">

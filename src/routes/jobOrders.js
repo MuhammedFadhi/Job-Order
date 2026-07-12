@@ -114,6 +114,42 @@ router.post('/:id/send-report', async (req, res) => {
     }
 });
 
+// POST mark job complete — bulk-completes all work orders + closes job
+router.post('/:id/complete', async (req, res) => {
+    const jobId = req.params.id;
+
+    try {
+        // 1. Mark all work orders for this job as completed + tested: pass
+        const now = new Date().toISOString();
+        const { error: woError } = await supabase
+            .from('work_orders')
+            .update({
+                status: 'completed',
+                tested: 'pass',
+                time_out: now,
+                updated_at: now
+            })
+            .eq('ref_id_jo', jobId)
+            .neq('status', 'completed'); // skip already-completed ones
+
+        if (woError) return res.status(500).json({ error: woError.message });
+
+        // 2. Close the job order
+        const { data, error: joError } = await supabase
+            .from('job_orders')
+            .update({ status: 'closed', updated_at: now })
+            .eq('id', jobId)
+            .select();
+
+        if (joError) return res.status(500).json({ error: joError.message });
+        if (!data.length) return res.status(404).json({ error: 'Job order not found' });
+
+        res.json({ success: true, job: data[0] });
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to complete job' });
+    }
+});
+
 // PUT update job order
 router.put('/:id', async (req, res) => {
     const { title, description, customer_name, status, assigned_by, assigned_to, priority } = req.body;
