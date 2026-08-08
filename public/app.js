@@ -9,6 +9,16 @@ let allUsers = [];
 let joViewMode = localStorage.getItem('joViewMode') || 'grid';
 let joSearchQuery = '';
 let allCustomers = [];
+let lastDashboardJobs = [];
+let userHoursChart = null;
+let trendChart = null;
+let currentUserHoursPeriod = 'all';
+let jobDetailWOTab = 'brief';
+let dtAllRows = [];
+let dtPage = 1;
+let dtPageSize = 10;
+let dtSearchQuery = '';
+let jobOrdersStatusFilter = '';
 
 // API Configuration
 const API_BASE = '/api';
@@ -42,13 +52,15 @@ const views = {
     login: document.getElementById('login-view'),
     register: document.getElementById('register-view'),
     dashboard: document.getElementById('dashboard-view'),
+    jobOrders: document.getElementById('job-orders-view'),
+    jobOrderDetail: document.getElementById('job-detail-view'),
     admin: document.getElementById('admin-view'),
-    myWork: document.getElementById('my-work-view')
+    myWork: document.getElementById('my-work-view'),
+    settings: document.getElementById('settings-view')
 };
 
 const modals = {
     newJob: document.getElementById('new-job-modal'),
-    jobDetail: document.getElementById('job-detail-modal'),
     editJob: document.getElementById('edit-job-modal'),
     editWork: document.getElementById('edit-work-modal'),
     editTimeEntry: document.getElementById('edit-time-entry-modal')
@@ -79,13 +91,17 @@ async function initApp() {
                 const picker = document.getElementById('user-color-picker');
                 if (picker) picker.value = currentUser.color_code;
             }
-            switchView('dashboard');
-            loadDashboard();
-            
             // Show Admin Nav if user is Admin
             if (currentUser && currentUser.role === 'Admin') {
                 const adminNavLink = document.getElementById('admin-nav-link');
                 if (adminNavLink) adminNavLink.classList.remove('hidden');
+            }
+
+            // Honor a bookmarked/shared URL (e.g. from a dashboard card link);
+            // otherwise land on the Dashboard as usual.
+            if (!routeFromCurrentUrl()) {
+                switchView('dashboard');
+                loadDashboard();
             }
         } catch (e) {
             localStorage.removeItem('currentUser');
@@ -117,6 +133,137 @@ async function loadCustomers() {
     }
 }
 
+function applyTheme(theme) {
+    if (theme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+    }
+    localStorage.setItem('theme', theme);
+
+    const toggleBtn = document.getElementById('theme-toggle');
+    if (toggleBtn) {
+        const icon = toggleBtn.querySelector('i');
+        if (icon) icon.className = theme === 'light' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+        toggleBtn.title = theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode';
+    }
+}
+
+function applySidebarCollapse(collapsed) {
+    if (collapsed) {
+        document.documentElement.setAttribute('data-sidebar', 'collapsed');
+    } else {
+        document.documentElement.removeAttribute('data-sidebar');
+    }
+    localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');
+
+    const btn = document.getElementById('btn-sidebar-collapse');
+    if (btn) btn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+}
+
+function getCurrentTheme() {
+    return localStorage.getItem('theme') || 'dark';
+}
+
+async function saveAvatarColor(newColor) {
+    if (!currentUser) return;
+
+    // Reflect immediately everywhere the avatar shows
+    const sidebarAvatar = document.getElementById('current-user-avatar');
+    if (sidebarAvatar) sidebarAvatar.style.background = newColor;
+    const settingsAvatar = document.getElementById('settings-user-avatar');
+    if (settingsAvatar) settingsAvatar.style.background = newColor;
+
+    try {
+        const res = await fetch(`${API_BASE}/users/${currentUser.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ color_code: newColor })
+        });
+
+        if (res.ok) {
+            const updatedUser = await res.json();
+            currentUser.color_code = updatedUser.color_code;
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            showToast('Color updated.', 'success');
+            // Refresh current view to apply to active cards
+            if (!document.getElementById('dashboard-view').classList.contains('hidden-view')) loadDashboard();
+            else if (!document.getElementById('job-orders-view').classList.contains('hidden-view')) loadDashboard();
+            else if (!document.getElementById('admin-view').classList.contains('hidden-view')) loadAdminDashboard(document.querySelector('.admin-tabs .tab-btn.active')?.dataset.tab || 'all');
+            else if (!document.getElementById('my-work-view').classList.contains('hidden-view')) loadMyWorkDashboard(document.querySelector('#mywork-tabs .tab-btn.active')?.dataset.tab || 'all');
+        } else {
+            showToast('Failed to update color.', 'error');
+        }
+    } catch (error) {
+        showToast('Network error updating color.', 'error');
+    }
+}
+
+function loadSettingsProfile() {
+    if (!currentUser) return;
+
+    const avatar = document.getElementById('settings-user-avatar');
+    if (avatar) {
+        avatar.textContent = currentUser.name.charAt(0).toUpperCase();
+        avatar.style.background = currentUser.color_code || '#6366f1';
+    }
+    const colorPicker = document.getElementById('settings-color-picker');
+    if (colorPicker) colorPicker.value = currentUser.color_code || '#6366f1';
+
+    document.getElementById('settings-name-preview').textContent = currentUser.name;
+    document.getElementById('settings-username-preview').textContent = currentUser.username || '';
+    document.getElementById('settings-name-input').value = currentUser.name;
+    document.getElementById('settings-username-input').value = currentUser.username || '';
+    document.getElementById('settings-role-input').value = currentUser.role || 'User';
+
+    applyTheme(getCurrentTheme());
+}
+
+async function handleSaveSettingsProfile(e) {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    const newName = document.getElementById('settings-name-input').value.trim();
+    if (!newName) {
+        showToast('Name cannot be empty.', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('btn-save-settings-profile');
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+
+    try {
+        const res = await fetch(`${API_BASE}/users/${currentUser.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName })
+        });
+
+        if (res.ok) {
+            const updatedUser = await res.json();
+            currentUser.name = updatedUser.name;
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+
+            document.getElementById('current-user-name').textContent = currentUser.name;
+            document.getElementById('current-user-avatar').textContent = currentUser.name.charAt(0).toUpperCase();
+            document.getElementById('settings-name-preview').textContent = currentUser.name;
+            document.getElementById('settings-user-avatar').textContent = currentUser.name.charAt(0).toUpperCase();
+
+            showToast('Profile updated.', 'success');
+        } else {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.error || 'Failed to update profile.', 'error');
+        }
+    } catch (error) {
+        showToast('Network error updating profile.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+    }
+}
+
 function setupEventListeners() {
     // Nav 
     document.getElementById('btn-logout').addEventListener('click', handleLogout);
@@ -126,7 +273,27 @@ function setupEventListeners() {
     if (btnPause) {
         btnPause.addEventListener('click', togglePauseStopwatch);
     }
-    
+
+    // Stopwatch icon — toggles the active-work popover open/closed
+    const stopwatchIconBtn = document.getElementById('btn-stopwatch-icon');
+    if (stopwatchIconBtn) {
+        stopwatchIconBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const popover = document.getElementById('active-work-stopwatch');
+            if (popover.classList.contains('open')) {
+                closeStopwatchPopover();
+            } else {
+                openStopwatchPopover(stopwatchIconBtn);
+            }
+        });
+    }
+    document.getElementById('active-work-stopwatch')?.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', closeStopwatchPopover);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeStopwatchPopover();
+    });
+
+
     // Auth Forms
     const authForm = document.getElementById('auth-form');
     if (authForm) {
@@ -206,39 +373,67 @@ function setupEventListeners() {
         });
     }
 
-    // Color Picker Listener
-    const colorPicker = document.getElementById('user-color-picker');
-    if (colorPicker) {
-        colorPicker.addEventListener('change', async (e) => {
-            const newColor = e.target.value;
-            if(!currentUser) return;
-
-            document.getElementById('current-user-avatar').style.background = newColor;
-
-            try {
-                const res = await fetch(`${API_BASE}/users/${currentUser.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ color_code: newColor })
-                });
-
-                if(res.ok) {
-                    const updatedUser = await res.json();
-                    currentUser.color_code = updatedUser.color_code;
-                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                    showToast('Color updated globally.', 'success');
-                    // Refresh current view to apply to active cards
-                    if(!document.getElementById('dashboard-view').classList.contains('hidden-view')) loadDashboard();
-                    else if(!document.getElementById('admin-view').classList.contains('hidden-view')) loadAdminDashboard(document.querySelector('.admin-tabs .tab-btn.active')?.dataset.tab || 'all');
-                    else if(!document.getElementById('my-work-view').classList.contains('hidden-view')) loadMyWorkDashboard(document.querySelector('#mywork-tabs .tab-btn.active')?.dataset.tab || 'all');
-                } else {
-                    showToast('Failed to update color.', 'error');
-                }
-            } catch(error) {
-                showToast('Network error updating color.', 'error');
-            }
+    // Team Work Hours chart period toggle
+    const userHoursPeriodTabs = document.getElementById('user-hours-period-tabs');
+    if (userHoursPeriodTabs) {
+        userHoursPeriodTabs.addEventListener('click', (e) => {
+            const btn = e.target.closest('.chart-period-btn');
+            if (!btn) return;
+            document.querySelectorAll('#user-hours-period-tabs .chart-period-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentUserHoursPeriod = btn.dataset.period;
+            renderUserHoursChart(lastDashboardJobs);
         });
     }
+
+    // Color Picker Listeners (sidebar + Settings page both feed the same handler)
+    const colorPicker = document.getElementById('user-color-picker');
+    if (colorPicker) {
+        colorPicker.addEventListener('change', (e) => saveAvatarColor(e.target.value));
+    }
+    const settingsColorPicker = document.getElementById('settings-color-picker');
+    if (settingsColorPicker) {
+        settingsColorPicker.addEventListener('change', (e) => saveAvatarColor(e.target.value));
+    }
+
+    // Settings: Profile page nav + form
+    document.getElementById('btn-goto-settings')?.addEventListener('click', () => {
+        switchView('settings');
+        loadSettingsProfile();
+    });
+    document.getElementById('settings-profile-form')?.addEventListener('submit', handleSaveSettingsProfile);
+
+    // Theme toggle
+    document.getElementById('theme-toggle')?.addEventListener('click', () => {
+        applyTheme(getCurrentTheme() === 'light' ? 'dark' : 'light');
+    });
+
+    // Dashboard "My Active Work" data table controls
+    const dtSearchInput = document.getElementById('dt-search');
+    let dtSearchTimer;
+    if (dtSearchInput) {
+        dtSearchInput.addEventListener('input', () => {
+            clearTimeout(dtSearchTimer);
+            dtSearchTimer = setTimeout(() => {
+                dtSearchQuery = dtSearchInput.value;
+                dtPage = 1;
+                renderDtTable();
+            }, 250);
+        });
+    }
+    document.getElementById('dt-page-size')?.addEventListener('change', (e) => {
+        dtPageSize = parseInt(e.target.value, 10) || 10;
+        dtPage = 1;
+        renderDtTable();
+    });
+    document.getElementById('dt-prev')?.addEventListener('click', () => {
+        dtPage = Math.max(1, dtPage - 1);
+        renderDtTable();
+    });
+    document.getElementById('dt-next')?.addEventListener('click', () => {
+        dtPage += 1;
+        renderDtTable();
+    });
 
     // Modals
     document.getElementById('btn-new-job').addEventListener('click', () => {
@@ -297,23 +492,26 @@ function setupEventListeners() {
     document.getElementById('edit-time-entry-form').addEventListener('submit', handleUpdateTimeEntry);
     document.getElementById('btn-close-job').addEventListener('click', handleCloseJobOrder);
 
-    // Admin Navigation
-    const btnGotoAdmin = document.getElementById('btn-goto-admin');
-    if (btnGotoAdmin) {
-        btnGotoAdmin.addEventListener('click', () => {
+    // Admin Navigation — sidebar sub-links jump straight to a specific admin tab
+    document.querySelectorAll('#admin-nav-link .sidebar-sub').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.dataset.tab;
             switchView('admin');
+            document.querySelectorAll('#admin-nav-link .sidebar-sub').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('#admin-tabs .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+            updateAdminBreadcrumb(tab);
             populateAdminUserFilter();
             populateAdminJobFilter();
-            loadAdminDashboard();
+            loadAdminDashboard(tab);
         });
-    }
+    });
 
     const btnBackToJobs = document.getElementById('btn-back-to-jobs');
     if (btnBackToJobs) {
         btnBackToJobs.addEventListener('click', () => {
-            switchView('dashboard');
-            loadDashboard();
-            
+            goToJobOrders();
+
             // Show Admin Nav if user is Admin
             if (currentUser && currentUser.role === 'Admin') {
                 const adminNavLink = document.getElementById('admin-nav-link');
@@ -330,6 +528,8 @@ function setupEventListeners() {
                 document.querySelectorAll('#admin-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
                 e.target.classList.add('active');
                 const tab = e.target.dataset.tab;
+                document.querySelectorAll('#admin-nav-link .sidebar-sub').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+                updateAdminBreadcrumb(tab);
                 loadAdminDashboard(tab);
             }
         });
@@ -444,6 +644,64 @@ function setupEventListeners() {
         loadDashboard();
     });
 
+    // Sidebar "Dashboard" link
+    document.getElementById('btn-goto-dashboard')?.addEventListener('click', () => {
+        switchView('dashboard');
+        loadDashboard();
+    });
+
+    // Sidebar "Job Orders" link
+    document.getElementById('btn-goto-job-orders')?.addEventListener('click', () => {
+        goToJobOrders();
+    });
+
+    // Clear filter banner on the Job Orders page
+    document.getElementById('btn-clear-jo-filter')?.addEventListener('click', () => {
+        clearJobOrdersFilter();
+    });
+
+    // Mobile sidebar toggle
+    document.getElementById('btn-sidebar-toggle')?.addEventListener('click', () => {
+        document.getElementById('main-nav-header')?.classList.toggle('sidebar-open');
+        document.getElementById('sidebar-scrim')?.classList.toggle('sidebar-open');
+    });
+    document.getElementById('sidebar-scrim')?.addEventListener('click', closeSidebarMobile);
+
+    // Work order detail drawer
+    document.getElementById('btn-close-wo-drawer')?.addEventListener('click', closeWorkOrderDrawer);
+    document.getElementById('wo-drawer-scrim')?.addEventListener('click', closeWorkOrderDrawer);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeWorkOrderDrawer();
+    });
+
+    // Timeline toggle inside the drawer (mirrors the same handler bound to #work-orders-list)
+    const woDrawerBody = document.getElementById('wo-drawer-body');
+    if (woDrawerBody) {
+        woDrawerBody.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-timeline-toggle');
+            if (!btn) return;
+            const pipeline = document.getElementById(`pipeline-${btn.dataset.woId}`);
+            if (!pipeline) return;
+            const nowHidden = pipeline.classList.toggle('hidden');
+            btn.classList.toggle('open', !nowHidden);
+            const icon = btn.querySelector('i');
+            if (icon) icon.className = nowHidden ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-down';
+            const label = btn.querySelector('.timeline-toggle-label');
+            if (label) label.textContent = nowHidden ? 'View Time History' : 'Hide Time History';
+        });
+    }
+
+    // Desktop sidebar collapse toggle
+    const sidebarCollapseBtn = document.getElementById('btn-sidebar-collapse');
+    if (sidebarCollapseBtn) {
+        sidebarCollapseBtn.title = document.documentElement.getAttribute('data-sidebar') === 'collapsed'
+            ? 'Expand sidebar' : 'Collapse sidebar';
+        sidebarCollapseBtn.addEventListener('click', () => {
+            const isCollapsed = document.documentElement.getAttribute('data-sidebar') === 'collapsed';
+            applySidebarCollapse(!isCollapsed);
+        });
+    }
+
     // My Work Navigation
     const btnGotoMyWork = document.getElementById('btn-goto-my-work');
     if (btnGotoMyWork) {
@@ -462,8 +720,44 @@ function setupEventListeners() {
     const btnBackToJobsFromMyWork = document.getElementById('btn-back-to-jobs-from-mywork');
     if (btnBackToJobsFromMyWork) {
         btnBackToJobsFromMyWork.addEventListener('click', () => {
-            switchView('dashboard');
-            loadDashboard();
+            goToJobOrders();
+        });
+    }
+
+    const btnBackToJobsFromDetail = document.getElementById('btn-back-to-jobs-from-detail');
+    if (btnBackToJobsFromDetail) {
+        btnBackToJobsFromDetail.addEventListener('click', () => {
+            goToJobOrders();
+        });
+    }
+
+    // Job Detail: Work Orders bare-list vs full-detail tabs
+    const jdWoTabs = document.getElementById('jd-wo-tabs');
+    if (jdWoTabs) {
+        jdWoTabs.addEventListener('click', (e) => {
+            const btn = e.target.closest('.tab-btn');
+            if (!btn) return;
+            jdWoTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            jobDetailWOTab = btn.dataset.tab;
+            renderWorkOrders(window._lastRenderedWorkOrders || []);
+        });
+    }
+
+    // Work order timeline: collapsed by default, toggle to view pause/resume history
+    const workOrdersList = document.getElementById('work-orders-list');
+    if (workOrdersList) {
+        workOrdersList.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-timeline-toggle');
+            if (!btn) return;
+            const pipeline = document.getElementById(`pipeline-${btn.dataset.woId}`);
+            if (!pipeline) return;
+            const nowHidden = pipeline.classList.toggle('hidden');
+            btn.classList.toggle('open', !nowHidden);
+            const icon = btn.querySelector('i');
+            if (icon) icon.className = nowHidden ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-down';
+            const label = btn.querySelector('.timeline-toggle-label');
+            if (label) label.textContent = nowHidden ? 'View Time History' : 'Hide Time History';
         });
     }
 
@@ -529,21 +823,154 @@ function switchView(viewName) {
         view.classList.remove('active-view');
         view.classList.add('hidden-view');
     });
-    
-    // Handle Global Header visibility
+
+    // Handle Sidebar Nav visibility (hidden on login/register)
     const mainHeader = document.getElementById('main-nav-header');
-    if (mainHeader) {
-        if (viewName === 'login' || viewName === 'register') {
-            mainHeader.classList.add('hidden-view');
-        } else {
-            mainHeader.classList.remove('hidden-view');
-        }
+    const sidebarToggle = document.getElementById('btn-sidebar-toggle');
+    const sidebarCollapseToggle = document.getElementById('btn-sidebar-collapse');
+    const stopwatchIcon = document.getElementById('btn-stopwatch-icon');
+    const showNav = viewName !== 'login' && viewName !== 'register';
+    if (mainHeader) mainHeader.classList.toggle('hidden-view', !showNav);
+    if (sidebarToggle) sidebarToggle.classList.toggle('hidden-view', !showNav);
+    if (sidebarCollapseToggle) sidebarCollapseToggle.classList.toggle('hidden-view', !showNav);
+    if (stopwatchIcon) stopwatchIcon.classList.toggle('hidden-view', !showNav);
+
+    closeSidebarMobile();
+    closeWorkOrderDrawer();
+    closeStopwatchPopover();
+
+    // Highlight the active sidebar link for this view
+    document.querySelectorAll('.sidebar-link').forEach(link => link.classList.remove('active'));
+    if (viewName === 'dashboard') {
+        document.getElementById('btn-goto-dashboard')?.classList.add('active');
+    } else if (viewName === 'jobOrders' || viewName === 'jobOrderDetail') {
+        document.getElementById('btn-goto-job-orders')?.classList.add('active');
+    } else if (viewName === 'myWork') {
+        document.getElementById('btn-goto-my-work')?.classList.add('active');
+    } else if (viewName === 'settings') {
+        document.getElementById('btn-goto-settings')?.classList.add('active');
     }
 
     views[viewName].classList.remove('hidden-view');
     // small timeout to allow display:block to apply before animating opacity
     setTimeout(() => views[viewName].classList.add('active-view'), 50);
 }
+
+function closeSidebarMobile() {
+    document.getElementById('main-nav-header')?.classList.remove('sidebar-open');
+    document.getElementById('sidebar-scrim')?.classList.remove('sidebar-open');
+}
+
+// Plain navigation to Job Orders (sidebar link, "Back to Job Orders" buttons,
+// post-completion flows) always clears any status filter left over from a
+// dashboard card link, so it never silently shows a stale filtered view.
+function goToJobOrders() {
+    jobOrdersStatusFilter = '';
+    switchView('jobOrders');
+    loadDashboard();
+}
+
+function clearJobOrdersFilter() {
+    goToJobOrders();
+}
+
+function updateAdminBreadcrumb(tab) {
+    const labels = { all: 'Work Orders', jobs: 'Job Summaries', customers: 'Clients' };
+    const el = document.getElementById('breadcrumb-admin-tab');
+    if (el) el.textContent = labels[tab] || 'Work Orders';
+}
+
+// --- URL Parameter Routing (dashboard stat cards → shareable/bookmarkable links) ---
+
+// Applies a view + its filters. Shared by card clicks, initial page load
+// (when the URL already carries params), and browser back/forward.
+function applyRoute(view, params = {}) {
+    switch (view) {
+        case 'jobOrders':
+            jobOrdersStatusFilter = params.status === 'open' ? 'open' : '';
+            switchView('jobOrders');
+            loadDashboard();
+            break;
+
+        case 'myWork': {
+            switchView('myWork');
+            populateMyWorkJobFilter();
+            const tab = params.tab || 'all';
+            document.querySelectorAll('#mywork-tabs .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+            loadMyWorkDashboard(tab);
+            break;
+        }
+
+        case 'admin': {
+            if (!currentUser || currentUser.role !== 'Admin') {
+                switchView('dashboard');
+                loadDashboard();
+                break;
+            }
+            switchView('admin');
+            const tab = params.tab || 'all';
+            document.querySelectorAll('#admin-nav-link .sidebar-sub').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+            document.querySelectorAll('#admin-tabs .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+            updateAdminBreadcrumb(tab);
+            const statusSelect = document.getElementById('admin-status-filter');
+            if (statusSelect) statusSelect.value = params.status || 'all';
+            populateAdminUserFilter();
+            populateAdminJobFilter();
+            loadAdminDashboard(tab);
+            break;
+        }
+
+        case 'settings':
+            switchView('settings');
+            loadSettingsProfile();
+            break;
+
+        case 'dashboard':
+        default:
+            switchView('dashboard');
+            loadDashboard();
+    }
+}
+
+// Pushes a real URL (view + params) so the destination is shareable,
+// bookmarkable, and works with the browser back/forward buttons.
+function navigateTo(view, params = {}) {
+    const search = new URLSearchParams({ view, ...params }).toString();
+    history.pushState({ view, params }, '', `?${search}`);
+    applyRoute(view, params);
+}
+
+// Cards 3-6 (work-order stat counts) point at different pages depending on
+// role: Admins have a dedicated Work Orders admin view; everyone else sees
+// their own work through "My Work Orders" instead.
+function navigateToWorkOrders(status) {
+    const isAdmin = currentUser && currentUser.role === 'Admin';
+    if (isAdmin) {
+        navigateTo('admin', { tab: 'all', status });
+    } else {
+        navigateTo('myWork', { tab: status });
+    }
+}
+
+function routeFromCurrentUrl() {
+    const params = Object.fromEntries(new URLSearchParams(location.search).entries());
+    const view = params.view;
+    delete params.view;
+    if (!view) return false;
+    applyRoute(view, params);
+    return true;
+}
+
+window.addEventListener('popstate', (e) => {
+    if (!currentUser) return;
+    if (e.state && e.state.view) {
+        applyRoute(e.state.view, e.state.params || {});
+    } else if (!routeFromCurrentUrl()) {
+        // No state and no URL params — this is the pre-navigation entry, i.e. Dashboard.
+        switchView('dashboard');
+        loadDashboard();
+    }
+});
 
 function togglePasswordVisibility(inputId, iconId) {
     const input = document.getElementById(inputId);
@@ -681,6 +1108,355 @@ function handleLogout() {
 
 // --- Dashboard Logic ---
 
+function getChartAccentColor() {
+    return getComputedStyle(document.documentElement).getPropertyValue('--accent-primary').trim() || '#6366f1';
+}
+
+function isLightTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'light';
+}
+
+function getChartGridColor() {
+    return isLightTheme() ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.06)';
+}
+
+function getChartTickColor() {
+    return isLightTheme() ? '#64748b' : '#94a3b8';
+}
+
+function hexToRgba(hex, alpha) {
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    const bigint = parseInt(full, 16);
+    const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function chartTooltipDefaults() {
+    return {
+        backgroundColor: 'rgba(13,16,26,0.95)',
+        borderColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 1,
+        titleColor: '#f8fafc',
+        bodyColor: '#f8fafc',
+        padding: 10
+    };
+}
+
+function aggregateUserHours(jobs, period) {
+    const allWorkOrders = jobs.flatMap(j => j.work_orders || []);
+    const now = getServerNow();
+    let dayStartMs = null;
+
+    if (period === 'today') {
+        const d = new Date(now);
+        d.setHours(0, 0, 0, 0);
+        dayStartMs = d.getTime();
+    } else if (period === 'week') {
+        dayStartMs = now - 7 * 24 * 60 * 60 * 1000;
+    } else if (period === 'month') {
+        dayStartMs = now - 30 * 24 * 60 * 60 * 1000;
+    }
+
+    // Admins see the whole team's hours; regular users only ever see their own.
+    const isAdmin = currentUser && currentUser.role === 'Admin';
+
+    const hoursByUser = {};
+    const addHours = (userId, ms) => {
+        if (!userId || ms <= 0) return;
+        if (!isAdmin && userId !== currentUser?.id) return;
+        hoursByUser[userId] = (hoursByUser[userId] || 0) + ms;
+    };
+
+    allWorkOrders.forEach(wo => {
+        if (!wo.time_in) return;
+        const ms = period === 'all'
+            ? calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, wo.user_id, wo.status)
+            : calcDailyWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, wo.user_id, wo.status, dayStartMs, now);
+        if (ms <= 0) return;
+        addHours(wo.user_id, ms);
+        (Array.isArray(wo.tagged_user_ids) ? wo.tagged_user_ids : []).forEach(tid => addHours(tid, ms));
+    });
+
+    return Object.entries(hoursByUser)
+        .map(([userId, ms]) => {
+            const user = allUsers.find(u => u.id === userId);
+            return { name: user ? user.name : 'Unknown', ms };
+        })
+        .sort((a, b) => b.ms - a.ms)
+        .slice(0, isAdmin ? 10 : 1);
+}
+
+function renderUserHoursChart(jobs) {
+    if (typeof Chart === 'undefined') return;
+    const canvas = document.getElementById('chart-user-hours');
+    const emptyMsg = document.getElementById('chart-user-hours-empty');
+    if (!canvas) return;
+
+    const isAdmin = currentUser && currentUser.role === 'Admin';
+    const titleEl = document.getElementById('chart-user-hours-title');
+    if (titleEl) titleEl.textContent = isAdmin ? 'Team Work Hours' : 'My Work Hours';
+
+    const rows = aggregateUserHours(jobs, currentUserHoursPeriod);
+
+    if (rows.length === 0) {
+        canvas.classList.add('hidden');
+        emptyMsg?.classList.remove('hidden');
+        if (userHoursChart) { userHoursChart.destroy(); userHoursChart = null; }
+        return;
+    }
+    canvas.classList.remove('hidden');
+    emptyMsg?.classList.add('hidden');
+
+    const accent = getChartAccentColor();
+    const labels = rows.map(r => r.name);
+    const data = rows.map(r => +(r.ms / 3600000).toFixed(2));
+
+    if (userHoursChart) userHoursChart.destroy();
+    userHoursChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Hours',
+                data,
+                backgroundColor: hexToRgba(accent, 0.65),
+                hoverBackgroundColor: accent,
+                borderRadius: 6,
+                borderSkipped: false,
+                maxBarThickness: 42
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { ...chartTooltipDefaults(), callbacks: { label: (ctx) => `${ctx.parsed.y}h logged` } }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: getChartTickColor(), font: { size: 11 } }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: getChartGridColor() },
+                    ticks: { color: getChartTickColor(), font: { size: 11 } }
+                }
+            }
+        }
+    });
+}
+
+function aggregateTrend(jobs) {
+    const allWorkOrders = jobs.flatMap(j => j.work_orders || []);
+    const days = [];
+    const today = new Date(getServerNow());
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 13; i >= 0; i--) {
+        const dayStart = new Date(today);
+        dayStart.setDate(dayStart.getDate() - i);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setDate(dayEnd.getDate() + 1);
+        days.push({
+            label: dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            startMs: dayStart.getTime(),
+            endMs: dayEnd.getTime()
+        });
+    }
+
+    const data = days.map(d => {
+        let ms = 0;
+        allWorkOrders.forEach(wo => {
+            if (!wo.time_in) return;
+            ms += calcDailyWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, wo.user_id, wo.status, d.startMs, d.endMs);
+        });
+        return +(ms / 3600000).toFixed(2);
+    });
+
+    return { labels: days.map(d => d.label), data };
+}
+
+function renderTrendChart(jobs) {
+    if (typeof Chart === 'undefined') return;
+    const canvas = document.getElementById('chart-trend');
+    const emptyMsg = document.getElementById('chart-trend-empty');
+    if (!canvas) return;
+
+    const { labels, data } = aggregateTrend(jobs);
+    const hasActivity = data.some(v => v > 0);
+
+    if (!hasActivity) {
+        canvas.classList.add('hidden');
+        emptyMsg?.classList.remove('hidden');
+        if (trendChart) { trendChart.destroy(); trendChart = null; }
+        return;
+    }
+    canvas.classList.remove('hidden');
+    emptyMsg?.classList.add('hidden');
+
+    const accent = getChartAccentColor();
+
+    if (trendChart) trendChart.destroy();
+    trendChart = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Hours Logged',
+                data,
+                borderColor: accent,
+                backgroundColor: hexToRgba(accent, 0.12),
+                borderWidth: 2,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                pointBackgroundColor: accent,
+                pointBorderColor: '#0a0c14',
+                pointBorderWidth: 1,
+                tension: 0.35,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: { ...chartTooltipDefaults(), callbacks: { label: (ctx) => `${ctx.parsed.y}h logged` } }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: getChartTickColor(), font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 7 }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: getChartGridColor() },
+                    ticks: { color: getChartTickColor(), font: { size: 11 } }
+                }
+            }
+        }
+    });
+}
+
+function renderMyActiveWork(jobs) {
+    if (!currentUser) return;
+
+    const rows = [];
+    jobs.forEach(job => {
+        (job.work_orders || []).forEach(wo => {
+            if (wo.status !== 'started' && wo.status !== 'paused') return;
+            const woUserId = wo.user_id || (wo.user ? wo.user.id : null);
+            const isLead = woUserId === currentUser.id;
+            const isTagged = Array.isArray(wo.tagged_user_ids) && wo.tagged_user_ids.includes(currentUser.id);
+            if (!isLead && !isTagged) return;
+            rows.push({ wo, job, isLead });
+        });
+    });
+
+    // Most recently started first
+    rows.sort((a, b) => new Date(b.wo.time_in) - new Date(a.wo.time_in));
+
+    dtAllRows = rows;
+    dtPage = 1;
+    renderDtTable();
+}
+
+function renderDtTable() {
+    const tbody = document.getElementById('dashboard-my-work-list');
+    const entriesInfo = document.getElementById('dt-entries-info');
+    const prevBtn = document.getElementById('dt-prev');
+    const nextBtn = document.getElementById('dt-next');
+    if (!tbody) return;
+
+    const query = dtSearchQuery.trim().toLowerCase();
+    const filtered = query
+        ? dtAllRows.filter(({ wo, job }) =>
+            (wo.description || '').toLowerCase().includes(query) ||
+            job.id.toLowerCase().includes(query) ||
+            (job.title || '').toLowerCase().includes(query))
+        : dtAllRows;
+
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / dtPageSize));
+    if (dtPage > totalPages) dtPage = totalPages;
+
+    const start = total === 0 ? 0 : (dtPage - 1) * dtPageSize + 1;
+    const end = Math.min(dtPage * dtPageSize, total);
+    const pageRows = filtered.slice(start - 1, end);
+
+    tbody.innerHTML = '';
+
+    if (total === 0) {
+        tbody.innerHTML = `<tr class="dt-empty-row"><td colspan="5">No active work orders${query ? ' match your search.' : '.'}</td></tr>`;
+    } else {
+        pageRows.forEach(({ wo, job, isLead }) => {
+            const isPaused = isWorkOrderPaused(wo);
+            const woUserId = wo.user_id || (wo.user ? wo.user.id : null);
+            const workedStr = formatDuration(calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, woUserId, wo.status));
+            const disabledAttr = !isLead ? 'disabled' : '';
+            const disabledTitle = !isLead ? 'title="Only the assigned user can control this"' : '';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>
+                    <span class="dt-wo-title">${wo.description || 'No description'}</span>
+                    <span class="dt-wo-id">${wo.id}</span>
+                </td>
+                <td>
+                    <span class="dt-job-link" onclick="openJobDetail('${job.id}')" title="Open Job Order">${job.id}</span>
+                    <span class="dt-job-sub">${job.title}</span>
+                </td>
+                <td class="dt-worked">${workedStr}</td>
+                <td>
+                    <span class="dt-status">
+                        <span class="${isPaused ? 'pulse-dot-paused' : 'pulse-dot'}"></span>
+                        ${isPaused ? 'Paused' : 'In Progress'}
+                    </span>
+                </td>
+                <td>
+                    <div class="dt-actions">
+                        <button class="compact-icon-btn" onclick="toggleWorkOrderPause('${wo.id}', '${wo.status}')" ${disabledAttr} ${disabledTitle || `title="${isPaused ? 'Resume' : 'Pause'}"`}>
+                            <i class="fa-solid ${isPaused ? 'fa-play' : 'fa-pause'}"></i>
+                        </button>
+                        <button class="compact-icon-btn" onclick="completeWorkOrder('${wo.id}')" ${disabledAttr} ${disabledTitle || 'title="Finish"'}>
+                            <i class="fa-solid fa-check"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    if (entriesInfo) entriesInfo.textContent = `Showing ${total === 0 ? 0 : start} to ${end} of ${total} entries`;
+    if (prevBtn) prevBtn.disabled = dtPage <= 1;
+    if (nextBtn) nextBtn.disabled = dtPage >= totalPages;
+}
+
+function updateDashboardStats(jobs) {
+    const setStat = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+
+    const allWorkOrders = jobs.flatMap(j => j.work_orders || []);
+    const activeJobs = jobs.filter(j => j.status === 'open');
+    const pendingWO = allWorkOrders.filter(w => w.status === 'pending');
+    const inProgressWO = allWorkOrders.filter(w => ['started', 'ongoing', 'paused'].includes(w.status));
+    const completedWO = allWorkOrders.filter(w => w.status === 'completed');
+
+    setStat('stat-total-jobs', jobs.length);
+    setStat('stat-active-jobs', activeJobs.length);
+    setStat('stat-total-wo', allWorkOrders.length);
+    setStat('stat-pending-wo', pendingWO.length);
+    setStat('stat-inprogress-wo', inProgressWO.length);
+    setStat('stat-completed-wo', completedWO.length);
+}
+
 async function loadDashboard() {
     const activeContainer = document.getElementById('active-job-orders-container');
     const completedContainer = document.getElementById('completed-job-orders-container');
@@ -707,6 +1483,12 @@ async function loadDashboard() {
 
         activeContainer.innerHTML = ''; // Clear loader
 
+        lastDashboardJobs = jobs;
+        updateDashboardStats(jobs);
+        renderUserHoursChart(jobs);
+        renderTrendChart(jobs);
+        renderMyActiveWork(jobs);
+
         if(jobs.length === 0) {
             activeContainer.innerHTML = '<p class="text-muted" style="grid-column: 1/-1;">No job orders available. Create one to get started.</p>';
             completedContainer.innerHTML = '<p class="text-muted" style="grid-column: 1/-1;">No completed job orders.</p>';
@@ -714,24 +1496,40 @@ async function loadDashboard() {
         }
 
         const joSearchVal = document.getElementById('jo-search-input').value.toLowerCase();
-        
+
         let activeJobs = jobs.filter(j => j.status === 'open');
         let completedJobs = jobs.filter(j => j.status === 'closed' || j.status === 'completed');
 
         // Apply Search Filter locally
         if (joSearchVal) {
-            const filterFn = j => 
-                j.id.toLowerCase().includes(joSearchVal) || 
-                j.title.toLowerCase().includes(joSearchVal) || 
+            const filterFn = j =>
+                j.id.toLowerCase().includes(joSearchVal) ||
+                j.title.toLowerCase().includes(joSearchVal) ||
                 (j.customer_name || '').toLowerCase().includes(joSearchVal);
-            
+
             activeJobs = activeJobs.filter(filterFn);
             completedJobs = completedJobs.filter(filterFn);
+        }
+
+        // Status filter from a dashboard card link ("Active Job Orders" -> open only)
+        const jdFilterBanner = document.getElementById('jo-filter-banner');
+        const jdCompletedHeader = document.getElementById('jo-completed-section-header');
+        const showOnlyActive = jobOrdersStatusFilter === 'open';
+        if (showOnlyActive) {
+            completedJobs = [];
+            if (jdCompletedHeader) jdCompletedHeader.classList.add('hidden');
+            completedContainer.classList.add('hidden');
+            if (jdFilterBanner) jdFilterBanner.classList.remove('hidden');
+        } else {
+            if (jdCompletedHeader) jdCompletedHeader.classList.remove('hidden');
+            completedContainer.classList.remove('hidden');
+            if (jdFilterBanner) jdFilterBanner.classList.add('hidden');
         }
 
         // Apply View Mode Containers
         activeContainer.className = joViewMode === 'grid' ? 'grid-container' : 'list-container';
         completedContainer.className = joViewMode === 'grid' ? 'grid-container' : 'list-container';
+        if (showOnlyActive) completedContainer.classList.add('hidden');
 
         // Sort completed jobs so the most recently completed are at the bottom
         completedJobs.sort((a, b) => {
@@ -1012,12 +1810,27 @@ async function handleCreateJob(e) {
 
 async function openJobDetail(jobId) {
     try {
+        // Only reset to the bare "Work Orders" tab when navigating to a
+        // different job — refreshing the same job (after an edit, etc.)
+        // should keep whichever tab the user was already on.
+        const isNewJob = !currentJobOrder || currentJobOrder.id !== jobId;
+
         const res = await fetch(`${API_BASE}/job-orders/${jobId}`);
         currentJobOrder = await res.json();
-        
+
+        if (isNewJob) {
+            jobDetailWOTab = 'brief';
+            const jdWoTabs = document.getElementById('jd-wo-tabs');
+            if (jdWoTabs) {
+                jdWoTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'brief'));
+            }
+        }
+
         // Populate Header
         document.getElementById('jd-title').textContent = currentJobOrder.title;
         document.getElementById('jd-id').textContent = currentJobOrder.id;
+        const breadcrumbTitle = document.getElementById('breadcrumb-job-title');
+        if (breadcrumbTitle) breadcrumbTitle.textContent = currentJobOrder.title;
         
         const statusEl = document.getElementById('jd-status');
         statusEl.textContent = currentJobOrder.status;
@@ -1028,7 +1841,9 @@ async function openJobDetail(jobId) {
         document.getElementById('jd-priority').innerHTML = getPriorityHTML(currentJobOrder.priority);
         document.getElementById('jd-assigned').textContent = getAssignedNamesHTML(currentJobOrder);
         document.getElementById('jd-date').textContent = formatDateDDMMYYYY(currentJobOrder.created_at);
-        document.getElementById('jd-desc').textContent = currentJobOrder.description || 'No description provided.';
+        document.getElementById('jd-desc').textContent = currentJobOrder.description || '';
+        const jdDescWrap = document.getElementById('jd-desc-wrap');
+        if (jdDescWrap) jdDescWrap.classList.toggle('hidden-view', !currentJobOrder.description);
         
         // Calculate Total Duration
         let totalJoMs = 0;
@@ -1041,6 +1856,25 @@ async function openJobDetail(jobId) {
 
         // Render Work Orders
         renderWorkOrders(currentJobOrder.work_orders || []);
+
+        // Update Toggle All (Pause All / Resume All) button state
+        const btnToggleAll = document.getElementById('btn-toggle-all-wo');
+        if (btnToggleAll) {
+            const activeWOs = (currentJobOrder.work_orders || []).filter(wo => wo.status !== 'completed' && wo.status !== 'pending');
+            if (activeWOs.length === 0) {
+                btnToggleAll.style.display = 'none';
+            } else {
+                btnToggleAll.style.display = 'inline-flex';
+                const hasRunning = activeWOs.some(wo => wo.status !== 'paused');
+                if (hasRunning) {
+                    btnToggleAll.innerHTML = '<i class="fa-solid fa-pause"></i> Pause All';
+                    btnToggleAll.title = 'Pause all active work orders';
+                } else {
+                    btnToggleAll.innerHTML = '<i class="fa-solid fa-play"></i> Resume All';
+                    btnToggleAll.title = 'Resume all paused work orders';
+                }
+            }
+        }
 
         // Reset forms
         document.getElementById('new-work-form').classList.add('hidden');
@@ -1060,7 +1894,7 @@ async function openJobDetail(jobId) {
             btnSendReport.onclick = () => handleSendReport(currentJobOrder.id);
         }
 
-        openModal(modals.jobDetail);
+        switchView('jobOrderDetail');
     } catch (err) {
         showToast('Error fetching job details.', 'error');
     }
@@ -1360,13 +2194,13 @@ function buildTimelineHTML(woId, timeIn, timeOut, serverHistory) {
     const isAdmin = currentUser && currentUser.role === 'Admin';
     
     if (history.length === 0 && !timeOut) return '';
-    
+
     const fmtTime = (ts) => {
         const d = new Date(ts);
         return `${formatDateDDMMYYYY(d)} ${d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}`;
     };
-    
-    let html = '<div class="time-pipeline">';
+
+    let html = '';
     
     // Helper to generate admin edit button
     const getEditBtn = (type, index, timestamp) => {
@@ -1424,15 +2258,196 @@ function buildTimelineHTML(woId, timeIn, timeOut, serverHistory) {
         </div>`;
     }
 
-    html += '</div>';
-    return html;
+    return `
+        <div class="timeline-toggle-wrap">
+            <button type="button" class="btn-timeline-toggle" data-wo-id="${woId}">
+                <i class="fa-solid fa-chevron-right"></i> <span class="timeline-toggle-label">View Time History</span>
+            </button>
+            <div class="time-pipeline hidden" id="pipeline-${woId}">${html}</div>
+        </div>
+    `;
+}
+
+// Bare list: just description, ID, status, and worked time — no actions, no history.
+let openWorkOrderDrawerId = null;
+
+function buildWorkOrderDetailHTML(wo) {
+    const isPending = wo.status === 'pending';
+    const isCompleted = wo.status === 'completed';
+    const isPaused = isWorkOrderPaused(wo);
+    const isActive = !isCompleted && !isPaused && !isPending;
+
+    let badgeClass = 'status-started';
+    let badgeLabel = 'IN PROGRESS';
+    if (isPending)   { badgeClass = 'status-paused'; badgeLabel = 'OPEN'; }
+    if (isCompleted) { badgeClass = 'status-completed'; badgeLabel = 'COMPLETED'; }
+    else if (isPaused) { badgeClass = 'status-paused'; badgeLabel = 'PAUSED'; }
+
+    const woUserId = wo.user_id || (wo.user ? wo.user.id : null);
+    const workedMs = isPending ? 0 : calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, woUserId, wo.status);
+    const workedStr = isPending ? '—' : formatDuration(workedMs);
+    const estimateStr = formatEstimate(wo.estimate_time);
+    const canAct = currentUser && (woUserId === currentUser.id);
+
+    const testedVal = TESTED_CFG_GLOBAL[wo.tested] ? wo.tested : 'not_tested';
+    const { label: tLabel, color: tc } = TESTED_CFG_GLOBAL[testedVal];
+    const testedSelectHTML = `
+        <div class="wo-tested-wrap" id="tested-wrap-drawer-${wo.id}">
+            <button type="button" class="wo-tested-btn" data-wo-id="${wo.id}"
+                style="border:1px solid ${tc}66; background:${tc}18; color:${tc};">
+                <span class="tested-dot" style="background:${tc};"></span>
+                <span class="tested-lbl">${tLabel}</span>
+                <i class="fa-solid fa-chevron-down tested-chevron"></i>
+            </button>
+        </div>`;
+
+    const assignedName = wo.user ? wo.user.name : (isPending ? '<span style="color:#f59e0b;">Open</span>' : 'Unknown');
+    const timelineHTML = isPending ? '' : buildTimelineHTML(wo.id, wo.time_in, wo.time_out, wo.pause_history);
+
+    const startDate = wo.time_in ? new Date(wo.time_in) : null;
+    const workDate = startDate ? formatDateDDMMYYYY(startDate) : '—';
+    const timeIn = startDate ? startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
+    const timeOut = wo.time_out
+        ? new Date(wo.time_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        : (isPaused ? 'Paused' : (isPending ? '—' : 'Ongoing'));
+
+    const safeDesc = (wo.description || '').replace(/'/g, "\\'");
+
+    return `
+        <div class="work-item ${isActive ? 'active-work' : ''}" style="border:none; background:transparent; padding-left:16px;">
+            <div class="work-item-body" style="padding:0;">
+                <div class="work-item-top">
+                    <div class="work-info">
+                        <span class="work-desc">${wo.description || 'No description'}</span>
+                        <div class="work-meta">
+                            <span>${wo.id}</span>
+                            <button onclick="copyWorkOrderDetails('${wo.id}')" title="Copy ID" style="background:none;border:none;cursor:pointer;padding:0 2px;color:#6366f1;font-size:0.75rem;vertical-align:middle;opacity:0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'"><i class="fa-regular fa-copy"></i></button>
+                            ${workDate !== '—' ? `<span class="work-meta-sep">·</span><span>${workDate}</span>` : ''}
+                            ${startDate ? `<span class="work-meta-sep">·</span><span>${timeIn} → ${timeOut}</span>` : ''}
+                        </div>
+                        <div class="work-chips">
+                            <span class="work-hours"><i class="fa-regular fa-clock"></i> Worked: <strong>${workedStr}</strong></span>
+                            <span style="display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); font-size:0.78rem; color:#888;">
+                                <i class="fa-solid fa-hourglass-half" style="font-size:0.65rem; color:#6366f1;"></i> Est: ${estimateStr}
+                            </span>
+                            ${testedSelectHTML}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="work-item-footer" style="padding:1.25rem 0 0; border-top:1px solid var(--border-glass); margin-top:1.25rem;">
+                <div class="work-item-footer-left">
+                    <div class="worker-group">
+                        <span class="work-user" title="${isPending ? 'Open — anyone can start' : 'Lead'}"><i class="fa-solid fa-user"></i> ${assignedName}</span>
+                        ${(wo.tagged_user_ids || []).map(tId => {
+                            const u = allUsers.find(user => user.id === tId);
+                            if (!u) return '';
+                            const initials = u.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                            const userColor = u.color_code ? `style="background: ${u.color_code};"` : '';
+                            return `<div class="worker-avatar" title="${u.name}" ${userColor}>${initials}</div>`;
+                        }).join('')}
+                    </div>
+                    <span class="badge ${badgeClass}">${badgeLabel}</span>
+                </div>
+                <div class="work-item-footer-right" style="margin-top:1rem; flex-wrap:wrap;">
+                    <button class="btn btn-icon btn-sm" onclick="openEditWorkModal('${wo.id}', '${safeDesc}')" title="Edit Description">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    ${isPending ? `<button class="btn btn-primary btn-sm" onclick="handleStartWorkOrder('${wo.id}')"><i class="fa-solid fa-play"></i> Start</button>` : ''}
+                    ${!isCompleted && !isPending ? `<button class="btn btn-outline btn-sm" onclick="toggleWorkOrderPause('${wo.id}', '${wo.status}')" ${!canAct ? 'disabled title="Only the assigned user can pause/resume"' : ''}>${isPaused ? '<i class="fa-solid fa-play"></i> Resume' : '<i class="fa-solid fa-pause"></i> Pause'}</button>` : ''}
+                    ${!isCompleted && !isPending ? `<button class="btn btn-success btn-sm" onclick="completeWorkOrder('${wo.id}')" ${!canAct ? 'disabled title="Only the assigned user can finish"' : ''}><i class="fa-solid fa-check"></i> Finish</button>` : ''}
+                    ${currentUser && currentUser.role === 'Admin' ? `<button class="btn btn-icon btn-sm" onclick="deleteWorkOrder('${wo.id}')" title="Delete Work Order" style="color:#f87171;"><i class="fa-solid fa-trash"></i></button>` : ''}
+                </div>
+            </div>
+            ${timelineHTML}
+        </div>
+    `;
+}
+
+function openWorkOrderDrawer(woId, silent) {
+    const wo = (window._lastRenderedWorkOrders || []).find(w => w.id === woId);
+    if (!wo) { closeWorkOrderDrawer(); return; }
+
+    openWorkOrderDrawerId = woId;
+    const body = document.getElementById('wo-drawer-body');
+    if (body) body.innerHTML = buildWorkOrderDetailHTML(wo);
+
+    const testedBtn = body?.querySelector('.wo-tested-btn');
+    if (testedBtn) {
+        testedBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeAllTestedDropdowns();
+            const wrap = testedBtn.closest('.wo-tested-wrap');
+            const panel = buildTestedPanel(wo.id, TESTED_CFG_GLOBAL[wo.tested] ? wo.tested : 'not_tested');
+            wrap.appendChild(panel);
+            testedBtn.classList.add('open');
+        });
+    }
+
+    if (!silent) {
+        document.getElementById('wo-drawer')?.classList.add('open');
+        document.getElementById('wo-drawer-scrim')?.classList.add('open');
+    }
+}
+
+function closeWorkOrderDrawer() {
+    openWorkOrderDrawerId = null;
+    document.getElementById('wo-drawer')?.classList.remove('open');
+    document.getElementById('wo-drawer-scrim')?.classList.remove('open');
+}
+
+function renderWorkOrdersBrief(workOrders, list) {
+    workOrders.forEach(wo => {
+        const isPending = wo.status === 'pending';
+        const isCompleted = wo.status === 'completed';
+        const isPaused = isWorkOrderPaused(wo);
+        const woUserId = wo.user_id || (wo.user ? wo.user.id : null);
+        const canAct = currentUser && (woUserId === currentUser.id);
+
+        let badgeClass = 'status-started';
+        let badgeLabel = 'IN PROGRESS';
+        if (isPending)   { badgeClass = 'status-paused'; badgeLabel = 'OPEN'; }
+        if (isCompleted) { badgeClass = 'status-completed'; badgeLabel = 'COMPLETED'; }
+        else if (isPaused) { badgeClass = 'status-paused'; badgeLabel = 'PAUSED'; }
+
+        const workedStr = isPending ? '—' : formatDuration(calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, woUserId, wo.status));
+
+        let statusActionHTML;
+        if (isPending) {
+            statusActionHTML = `<button class="btn btn-primary btn-sm" style="font-size:0.75rem; padding:0.25rem 0.65rem;" onclick="handleStartWorkOrder('${wo.id}')"><i class="fa-solid fa-play"></i> Start</button>`;
+        } else if (isCompleted) {
+            statusActionHTML = `<span class="badge ${badgeClass}">${badgeLabel}</span>`;
+        } else {
+            statusActionHTML = `<button class="btn btn-outline btn-sm" style="font-size:0.75rem; padding:0.25rem 0.65rem; border-color:${isPaused ? '#f59e0b55' : 'var(--border-glass)'}; color:${isPaused ? '#f59e0b' : 'var(--text-primary)'};" onclick="toggleWorkOrderPause('${wo.id}', '${wo.status}')" ${!canAct ? 'disabled title="Only assigned user can pause/resume"' : ''}>
+                <i class="fa-solid ${isPaused ? 'fa-play' : 'fa-pause'}"></i> ${isPaused ? 'Resume' : 'Pause'}
+            </button>`;
+        }
+
+        const row = document.createElement('div');
+        row.className = 'wo-brief-row';
+        row.innerHTML = `
+            <span class="wo-brief-id">${wo.id}</span>
+            <span class="wo-brief-desc">${wo.description || 'No description'}</span>
+            <div style="display:flex; align-items:center;">${statusActionHTML}</div>
+            <span class="wo-brief-time">${workedStr}</span>
+            <button type="button" class="wo-brief-expand" title="View details" aria-label="View work order details">
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+        `;
+        row.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (btn && !btn.classList.contains('wo-brief-expand')) return;
+            openWorkOrderDrawer(wo.id);
+        });
+        list.appendChild(row);
+    });
 }
 
 function renderWorkOrders(workOrders) {
     window._lastRenderedWorkOrders = workOrders;
     const list = document.getElementById('work-orders-list');
     list.innerHTML = '';
-    
+
     if(workOrders.length === 0) {
         list.innerHTML = '<p class="text-muted" style="margin-top:0.5rem;">No work orders yet.</p>';
         const addBtn = document.createElement('button');
@@ -1452,6 +2467,11 @@ function renderWorkOrders(workOrders) {
 
     // Sort by created_at desc (newest first)
     workOrders.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+
+    if (jobDetailWOTab === 'brief') {
+        renderWorkOrdersBrief(workOrders, list);
+        return;
+    }
 
     const localPauseState = getPauseState();
 
@@ -1524,21 +2544,26 @@ function renderWorkOrders(workOrders) {
         const safeDesc = (wo.description || '').replace(/'/g, "\\'");
 
         item.innerHTML = `
-            <div class="work-item-top">
-                <div class="work-info">
-                    <span class="work-desc">${wo.description || 'No description'}</span>
-                    <span class="work-meta">
-                        ${wo.id}
-                        <button onclick="copyWorkOrderDetails('${wo.id}')" title="Copy ID" style="background:none;border:none;cursor:pointer;padding:0 3px;color:#6366f1;font-size:0.8rem;vertical-align:middle;opacity:0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'"><i class="fa-regular fa-copy"></i></button>
-                        | ${workDate}${startDate ? ` | ${timeIn} &rarr; ${timeOut}` : ''}
-                    </span>
-                    <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; margin-top:4px;">
-                        <span class="work-hours"><i class="fa-regular fa-clock"></i> Worked: <strong>${workedStr}</strong></span>
-                        ${inlineEstHTML}
-                        ${testedSelectHTML}
+            <div class="work-item-body">
+                <div class="work-item-top">
+                    <div class="work-info">
+                        <span class="work-desc">${wo.description || 'No description'}</span>
+                        <div class="work-meta">
+                            <span>${wo.id}</span>
+                            <button onclick="copyWorkOrderDetails('${wo.id}')" title="Copy ID" style="background:none;border:none;cursor:pointer;padding:0 2px;color:#6366f1;font-size:0.75rem;vertical-align:middle;opacity:0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'"><i class="fa-regular fa-copy"></i></button>
+                            ${workDate !== '—' ? `<span class="work-meta-sep">·</span><span>${workDate}</span>` : ''}
+                            ${startDate ? `<span class="work-meta-sep">·</span><span>${timeIn} → ${timeOut}</span>` : ''}
+                        </div>
+                        <div class="work-chips">
+                            <span class="work-hours"><i class="fa-regular fa-clock"></i> Worked: <strong>${workedStr}</strong></span>
+                            ${inlineEstHTML}
+                            ${testedSelectHTML}
+                        </div>
                     </div>
                 </div>
-                <div class="work-item-actions">
+            </div>
+            <div class="work-item-footer">
+                <div class="work-item-footer-left">
                     <div class="worker-group">
                         <span class="work-user" title="${isPending ? 'Open — anyone can start' : 'Lead'}"><i class="fa-solid fa-user"></i> ${assignedName}</span>
                         ${(wo.tagged_user_ids || []).map(tId => {
@@ -1550,12 +2575,14 @@ function renderWorkOrders(workOrders) {
                         }).join('')}
                     </div>
                     <span class="badge ${badgeClass}">${badgeLabel}</span>
+                </div>
+                <div class="work-item-footer-right">
                     <button class="btn btn-icon btn-sm" onclick="openEditWorkModal('${wo.id}', '${safeDesc}')" title="Edit Description">
                         <i class="fa-solid fa-pen"></i>
                     </button>
                     ${isPending ? `<button class="btn btn-primary btn-sm" onclick="handleStartWorkOrder('${wo.id}')"><i class="fa-solid fa-play"></i> Start</button>` : ''}
                     ${!isCompleted && !isPending ? `<button class="btn btn-outline btn-sm" onclick="toggleWorkOrderPause('${wo.id}', '${wo.status}')" ${!canAct ? 'disabled title="Only the assigned user can pause/resume"' : ''}>${isPaused ? '<i class="fa-solid fa-play"></i> Resume' : '<i class="fa-solid fa-pause"></i> Pause'}</button>` : ''}
-                    ${!isCompleted && !isPending ? `<button class="btn btn-outline btn-sm" onclick="completeWorkOrder('${wo.id}')" ${!canAct ? 'disabled title="Only the assigned user can finish"' : ''}>Finish</button>` : ''}
+                    ${!isCompleted && !isPending ? `<button class="btn btn-success btn-sm" onclick="completeWorkOrder('${wo.id}')" ${!canAct ? 'disabled title="Only the assigned user can finish"' : ''}><i class="fa-solid fa-check"></i> Finish</button>` : ''}
                     ${currentUser && currentUser.role === 'Admin' ? `<button class="btn btn-icon btn-sm" onclick="deleteWorkOrder('${wo.id}')" title="Delete Work Order" style="color:#f87171;"><i class="fa-solid fa-trash"></i></button>` : ''}
                 </div>
             </div>
@@ -1598,6 +2625,16 @@ function renderWorkOrders(workOrders) {
         document.getElementById('new-work-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
     list.appendChild(addBtn);
+
+    // Keep the detail drawer's content in sync if it's open across re-renders
+    if (openWorkOrderDrawerId) {
+        const stillExists = workOrders.some(w => w.id === openWorkOrderDrawerId);
+        if (stillExists) {
+            openWorkOrderDrawer(openWorkOrderDrawerId, true);
+        } else {
+            closeWorkOrderDrawer();
+        }
+    }
 }
 
 const TESTED_CFG_GLOBAL = {
@@ -1824,10 +2861,26 @@ window.toggleWorkOrderPause = async function(workOrderId, currentStatus) {
     const pauseState = getPauseState();
     const woState = pauseState[workOrderId] || { accumulatedTime: 0, isPaused: false, lastResumedAt: null, history: [] };
     if (!woState.history) woState.history = [];
+
+    // Reconcile against the server's current history before appending a new
+    // event — the local cache may be stale or was cleared by a timeline edit,
+    // and blindly trusting it here would silently overwrite saved edits.
+    let serverStatus = currentStatus;
+    try {
+        const freshRes = await fetch(`${API_BASE}/work-orders/${workOrderId}`);
+        if (freshRes.ok) {
+            const freshWo = await freshRes.json();
+            woState.history = mergeHistory(woState.history, freshWo.pause_history);
+            serverStatus = freshWo.status;
+        }
+    } catch (err) {
+        console.error('Failed to fetch fresh work order before pause/resume:', err);
+    }
+
     const now = getServerNow();
-    
-    // Rely on local state for toggling
-    const isCurrentlyPaused = !!woState.isPaused;
+
+    // Trust the server's status over the local cache's isPaused flag
+    const isCurrentlyPaused = serverStatus === 'paused';
 
     if (isCurrentlyPaused) {
         // Resuming
@@ -1869,6 +2922,78 @@ window.toggleWorkOrderPause = async function(workOrderId, currentStatus) {
         loadMyWorkDashboard(document.querySelector('#mywork-tabs .tab-btn.active')?.dataset.tab || 'all');
     }
 }
+
+window.handleToggleAllJobWorkOrders = async function() {
+    if (!currentJobOrder || !currentJobOrder.work_orders || currentJobOrder.work_orders.length === 0) {
+        showToast('No work orders found for this job.', 'warning');
+        return;
+    }
+
+    const activeWOs = currentJobOrder.work_orders.filter(wo => wo.status !== 'completed' && wo.status !== 'pending');
+    if (activeWOs.length === 0) {
+        showToast('No active work orders to pause or resume.', 'info');
+        return;
+    }
+
+    const hasRunning = activeWOs.some(wo => wo.status !== 'paused');
+    const targetStatus = hasRunning ? 'paused' : 'started';
+    const actionLabel = hasRunning ? 'paused' : 'resumed';
+
+    showToast(`${hasRunning ? 'Pausing' : 'Resuming'} all work orders...`, 'info');
+
+    try {
+        await Promise.all(activeWOs.map(async (wo) => {
+            const pauseState = getPauseState();
+            const woState = pauseState[wo.id] || { accumulatedTime: 0, isPaused: false, lastResumedAt: null, history: [] };
+            if (!woState.history) woState.history = [];
+
+            try {
+                const freshRes = await fetch(`${API_BASE}/work-orders/${wo.id}`);
+                if (freshRes.ok) {
+                    const freshWo = await freshRes.json();
+                    woState.history = mergeHistory(woState.history, freshWo.pause_history);
+                }
+            } catch (err) {
+                console.error(`Failed to fetch fresh history for ${wo.id}:`, err);
+            }
+
+            const now = getServerNow();
+            if (targetStatus === 'paused' && wo.status !== 'paused') {
+                woState.isPaused = true;
+                if (woState.lastResumedAt) {
+                    woState.accumulatedTime += (now - woState.lastResumedAt);
+                }
+                woState.lastResumedAt = null;
+                woState.history.push({ type: 'pause', at: now });
+            } else if (targetStatus === 'started' && wo.status === 'paused') {
+                woState.isPaused = false;
+                woState.lastResumedAt = now;
+                woState.history.push({ type: 'resume', at: now });
+            }
+
+            pauseState[wo.id] = woState;
+            savePauseState(pauseState);
+
+            return fetch(`${API_BASE}/work-orders/${wo.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: targetStatus,
+                    pause_history: woState.history
+                })
+            });
+        }));
+
+        showToast(`All active work orders ${actionLabel}!`, 'success');
+        if (currentJobOrder && currentJobOrder.id) {
+            await openJobDetail(currentJobOrder.id);
+        }
+        if (typeof loadDashboard === 'function') await loadDashboard();
+    } catch (err) {
+        console.error('Error toggling all work orders:', err);
+        showToast('Failed to update all work orders.', 'error');
+    }
+};
 
 window.openEditTimeModal = function(woId, type, index, timestamp) {
     const date = new Date(timestamp);
@@ -2093,12 +3218,13 @@ async function showCompleteEmailStep(jobOrder) {
 
     skipBtn.onclick = () => {
         emailModal.classList.add('hidden');
-        closeModal(modals.jobDetail);
+        goToJobOrders();
     };
 
     sendBtn.onclick = async () => {
-        if (recipientRows.length === 0) { emailModal.classList.add('hidden'); closeModal(modals.jobDetail); return; }
+        if (recipientRows.length === 0) { emailModal.classList.add('hidden'); goToJobOrders(); return; }
         sendBtn.disabled = true;
+        sendBtn.classList.add('btn-loading');
         sendBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
         try {
             const res = await fetch(`${API_BASE}/job-orders/${jobOrder.id}/send-report`, {
@@ -2115,8 +3241,11 @@ async function showCompleteEmailStep(jobOrder) {
         } catch {
             showToast('Failed to send report.', 'error');
         } finally {
+            sendBtn.disabled = false;
+            sendBtn.classList.remove('btn-loading');
+            sendBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Report';
             emailModal.classList.add('hidden');
-            closeModal(modals.jobDetail);
+            goToJobOrders();
         }
     };
 }
@@ -2161,6 +3290,26 @@ function getPauseState() {
 
 function savePauseState(state) {
     localStorage.setItem('stopwatchPauseState', JSON.stringify(state));
+}
+
+// Picks whichever history is more complete: longer array wins, and on a tie
+// the one with the more recent last event wins. Used before appending a new
+// pause/resume event so a stale or cleared local cache never overwrites
+// timeline edits that were saved on the server.
+function mergeHistory(localHistory, serverHistory) {
+    localHistory = localHistory || [];
+    serverHistory = serverHistory || [];
+    let best = localHistory;
+    if (serverHistory.length > 0) {
+        if (serverHistory.length > localHistory.length) {
+            best = serverHistory;
+        } else if (serverHistory.length === localHistory.length && localHistory.length > 0) {
+            const lastServer = serverHistory[serverHistory.length - 1];
+            const lastLocal = localHistory[localHistory.length - 1];
+            if (lastServer.at > lastLocal.at) best = serverHistory;
+        }
+    }
+    return best;
 }
 
 function updateStopwatchState(activeJobs) {
@@ -2208,14 +3357,13 @@ function startStopwatch(jobId, woId, woDesc, timeInDateString, serverHistory) {
         stopwatchInterval = null;
     }
     
-    const container = document.getElementById('active-work-stopwatch');
     const jobSpan = document.getElementById('stopwatch-job');
     const woSpan = document.getElementById('stopwatch-wo');
     const descSpan = document.getElementById('stopwatch-desc');
     const timeSpan = document.getElementById('stopwatch-time');
     const btnPause = document.getElementById('btn-pause-stopwatch');
-    
-    container.classList.remove('hidden');
+
+    document.getElementById('btn-stopwatch-icon')?.classList.remove('hidden');
     jobSpan.textContent = jobId;
     if (woSpan) woSpan.textContent = `WO-${woId}`;
     if (descSpan) descSpan.textContent = woDesc;
@@ -2225,21 +3373,7 @@ function startStopwatch(jobId, woId, woDesc, timeInDateString, serverHistory) {
     let woState = pauseState[woId] || { accumulatedTime: 0, isPaused: false, lastResumedAt: null, history: [] };
     
     // Smart merge history: prioritized by length and last event timestamp
-    const localHistory = woState.history || [];
-    let bestHistory = localHistory;
-
-    if (serverHistory && serverHistory.length > 0) {
-        if (serverHistory.length > localHistory.length) {
-            bestHistory = serverHistory;
-        } else if (serverHistory.length === localHistory.length && localHistory.length > 0) {
-            const lastServer = serverHistory[serverHistory.length - 1];
-            const lastLocal = localHistory[localHistory.length - 1];
-            if (lastServer.at > lastLocal.at) {
-                bestHistory = serverHistory;
-            }
-        }
-    }
-    
+    const bestHistory = mergeHistory(woState.history, serverHistory);
     woState.history = bestHistory;
 
     // Derived properties from bestHistory
@@ -2310,6 +3444,21 @@ async function togglePauseStopwatch() {
     const pauseState = getPauseState();
     const woState = pauseState[currentActiveWorkOrderId] || { accumulatedTime: 0, isPaused: false, lastResumedAt: null, history: [] };
     if (!woState.history) woState.history = [];
+
+    // Reconcile against the server's current history before appending a new
+    // event — the local cache may be stale or was cleared by a timeline edit,
+    // and blindly trusting it here would silently overwrite saved edits.
+    try {
+        const freshRes = await fetch(`${API_BASE}/work-orders/${currentActiveWorkOrderId}`);
+        if (freshRes.ok) {
+            const freshWo = await freshRes.json();
+            woState.history = mergeHistory(woState.history, freshWo.pause_history);
+            woState.isPaused = freshWo.status === 'paused';
+        }
+    } catch (err) {
+        console.error('Failed to fetch fresh work order before pause/resume:', err);
+    }
+
     const now = getServerNow();
     const btnPause = document.getElementById('btn-pause-stopwatch');
 
@@ -2360,8 +3509,24 @@ function stopStopwatch() {
     }
     currentActiveJobId = null;
     currentActiveWorkOrderId = null;
-    const container = document.getElementById('active-work-stopwatch');
-    if (container) container.classList.add('hidden');
+    document.getElementById('btn-stopwatch-icon')?.classList.add('hidden');
+    closeStopwatchPopover();
+}
+
+function openStopwatchPopover(anchorEl) {
+    const popover = document.getElementById('active-work-stopwatch');
+    if (!popover || !anchorEl) return;
+    const rect = anchorEl.getBoundingClientRect();
+    // Right-align to the icon (which sits near the viewport's right edge) so
+    // the pill grows leftward instead of overflowing off-screen.
+    popover.style.top = `${rect.bottom + 10}px`;
+    popover.style.left = 'auto';
+    popover.style.right = `${Math.max(16, window.innerWidth - rect.right)}px`;
+    popover.classList.add('open');
+}
+
+function closeStopwatchPopover() {
+    document.getElementById('active-work-stopwatch')?.classList.remove('open');
 }
 
 // --- Utilities ---
@@ -2413,10 +3578,12 @@ async function loadAdminDashboard(filter = 'all') {
             if (statusFilterWrapper) statusFilterWrapper.classList.remove('hidden');
         }
         
-        // Apply Status Filter (In Progress / Completed)
+        // Apply Status Filter (Pending / In Progress / Completed)
         const statusFilter = document.getElementById('admin-status-filter')?.value || 'all';
-        if (statusFilter === 'ongoing') {
-            workOrders = workOrders.filter(wo => wo.status !== 'completed');
+        if (statusFilter === 'pending') {
+            workOrders = workOrders.filter(wo => wo.status === 'pending');
+        } else if (statusFilter === 'ongoing') {
+            workOrders = workOrders.filter(wo => wo.status === 'started' || wo.status === 'paused');
         } else if (statusFilter === 'completed') {
             workOrders = workOrders.filter(wo => wo.status === 'completed');
         }
@@ -2561,7 +3728,7 @@ function renderAdminWorkOrders(workOrders) {
         }).join('');
         
         const tagBadge = taggedIds.length > 0 
-            ? `<span class="badge" style="background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);font-size:0.6rem;"><i class="fa-solid fa-tags"></i> +${taggedIds.length}</span>` 
+            ? `<span class="badge" style="background:rgba(99, 102, 241,0.15);color:#a5b4fc;border:1px solid rgba(99, 102, 241,0.3);font-size:0.6rem;"><i class="fa-solid fa-tags"></i> +${taggedIds.length}</span>` 
             : '';
         
         row.innerHTML = `
@@ -2654,7 +3821,7 @@ function renderCustomers() {
         row.style.flexWrap = 'wrap';
 
         const emailsHTML = Array.isArray(c.emails) && c.emails.length > 0
-            ? c.emails.map(e => `<span style="font-size:0.75rem; padding: 2px 8px; background: rgba(99,102,241,0.12); color: #a5b4fc; border-radius: 4px; border: 1px solid rgba(99,102,241,0.2);">${e}</span>`).join(' ')
+            ? c.emails.map(e => `<span style="font-size:0.75rem; padding: 2px 8px; background: rgba(99, 102, 241,0.12); color: #a5b4fc; border-radius: 4px; border: 1px solid rgba(99, 102, 241,0.2);">${e}</span>`).join(' ')
             : `<span style="font-size:0.75rem; color:#555;">No emails</span>`;
 
         row.innerHTML = `
@@ -3064,9 +4231,9 @@ async function handlePrintDailyReport() {
             const isTagged = Array.isArray(wo.tagged_user_ids) && wo.tagged_user_ids.includes(currentUser.id);
             let participantLabel = '';
             if (isTagged) {
-                participantLabel = `<br><small style="color: var(--accent-primary); background: rgba(99,102,241,0.1); padding: 1px 4px; border-radius: 3px;">Lead: ${leadName}</small>`;
+                participantLabel = `<br><small style="color: var(--accent-primary); background: rgba(99, 102, 241,0.1); padding: 1px 4px; border-radius: 3px;">Lead: ${leadName}</small>`;
             } else if (taggedNames.length > 0) {
-                participantLabel = `<br><small style="color: var(--accent-primary); background: rgba(99,102,241,0.1); padding: 1px 4px; border-radius: 3px;">Tagged: ${taggedNames.join(', ')}</small>`;
+                participantLabel = `<br><small style="color: var(--accent-primary); background: rgba(99, 102, 241,0.1); padding: 1px 4px; border-radius: 3px;">Tagged: ${taggedNames.join(', ')}</small>`;
             }
             
             // Start time for today (either time_in or 12:00 AM)
@@ -3192,8 +4359,10 @@ async function loadMyWorkDashboard(filter = 'all') {
         }
 
         // Filter based on tab
-        if (filter === 'ongoing') {
-            workOrders = workOrders.filter(wo => wo.status !== 'completed');
+        if (filter === 'pending') {
+            workOrders = workOrders.filter(wo => wo.status === 'pending');
+        } else if (filter === 'ongoing') {
+            workOrders = workOrders.filter(wo => wo.status === 'started' || wo.status === 'paused');
         } else if (filter === 'completed') {
             workOrders = workOrders.filter(wo => wo.status === 'completed');
         }
@@ -3239,7 +4408,7 @@ function renderMyWorkOrders(workOrders) {
             : (wo.user ? `<span style="font-size:0.85rem;">${wo.user.name}</span>` : '—');
 
         const taggedBadge = wo._isTagged
-            ? `<span class="badge" style="background: rgba(99,102,241,0.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); font-size:0.65rem; margin-left: 4px;"><i class="fa-solid fa-tag"></i> Tagged</span>`
+            ? `<span class="badge" style="background: rgba(99, 102, 241,0.15); color: #a5b4fc; border: 1px solid rgba(99, 102, 241,0.3); font-size:0.65rem; margin-left: 4px;"><i class="fa-solid fa-tag"></i> Tagged</span>`
             : '';
 
         const safeDesc = (wo.description || '').replace(/'/g, "\\'");
@@ -3340,7 +4509,7 @@ window.handleStartWorkOrder = async function(woId) {
 async function handleSendReport(jobOrderId) {
     if (!currentUser) return;
     const btn = document.getElementById('btn-send-report');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...'; }
+    if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...'; }
 
     try {
         const res = await fetch(`${API_BASE}/job-orders/${jobOrderId}/send-report`, {
@@ -3357,7 +4526,7 @@ async function handleSendReport(jobOrderId) {
     } catch {
         showToast('Failed to send report.', 'error');
     } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Report'; }
+        if (btn) { btn.disabled = false; btn.classList.remove('btn-loading'); btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Report'; }
     }
 }
 

@@ -135,6 +135,40 @@
             color: var(--text-dim);
             font-style: italic;
         }
+
+        .field {
+            text-align: left;
+            margin-bottom: 16px;
+        }
+
+        .field label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .field select,
+        .field input[type="date"] {
+            width: 100%;
+            box-sizing: border-box;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: var(--text);
+            padding: 12px 14px;
+            font-family: inherit;
+            font-size: 0.95rem;
+        }
+
+        .field select:focus,
+        .field input[type="date"]:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
     </style>
 </head>
 <body>
@@ -142,12 +176,24 @@
         <div class="card">
             <div class="loader" id="loader"></div>
             <h1>Email System Test</h1>
-            <p>Trigger a manual daily report to verify your SMTP and Supabase configurations.</p>
-            
-            <button class="btn" id="testBtn">Send Test Report Now</button>
-            
+            <p>Send a work report for one specific user and date. It goes only to that user's own email — no admin copy, no one else.</p>
+
+            <div class="field">
+                <label for="userSelect">User</label>
+                <select id="userSelect">
+                    <option value="">Loading users...</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label for="dateInput">Date</label>
+                <input type="date" id="dateInput">
+            </div>
+
+            <button class="btn" id="testBtn">Send Report to Selected User</button>
+
             <div class="status-box" id="statusBox"></div>
-            
+
             <div class="config-note">
                 Ensure SMTP_USER and SMTP_PASS are set in your .env file before testing.
             </div>
@@ -158,8 +204,50 @@
         const testBtn = document.getElementById('testBtn');
         const statusBox = document.getElementById('statusBox');
         const loader = document.getElementById('loader');
+        const userSelect = document.getElementById('userSelect');
+        const dateInput = document.getElementById('dateInput');
+
+        // Default the date picker to today
+        dateInput.value = new Date().toISOString().split('T')[0];
+
+        async function loadUsers() {
+            try {
+                const res = await fetch('/api/users');
+                const users = await res.json();
+                const emailable = (users || []).filter(u => u.username && u.username.includes('@'));
+
+                if (emailable.length === 0) {
+                    userSelect.innerHTML = '<option value="">No users with an email found</option>';
+                    return;
+                }
+
+                userSelect.innerHTML = emailable
+                    .map(u => `<option value="${u.id}">${u.name} (${u.username})</option>`)
+                    .join('');
+            } catch (err) {
+                userSelect.innerHTML = '<option value="">Failed to load users</option>';
+            }
+        }
+
+        loadUsers();
 
         testBtn.addEventListener('click', async () => {
+            const userId = userSelect.value;
+            const date = dateInput.value;
+
+            if (!userId) {
+                statusBox.style.display = 'block';
+                statusBox.className = 'status-box status-error';
+                statusBox.innerHTML = '> Please select a user first.';
+                return;
+            }
+            if (!date) {
+                statusBox.style.display = 'block';
+                statusBox.className = 'status-box status-error';
+                statusBox.innerHTML = '> Please select a date first.';
+                return;
+            }
+
             testBtn.disabled = true;
             statusBox.style.display = 'block';
             statusBox.className = 'status-box';
@@ -167,16 +255,17 @@
             loader.style.display = 'block';
 
             try {
-                const response = await fetch('/api/test-email', {
+                const response = await fetch('/api/test-email/user', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, date })
                 });
 
                 const data = await response.json();
 
                 if (response.ok) {
                     statusBox.className = 'status-box status-success';
-                    statusBox.innerHTML = `> Success!\n> Users Processed: ${data.totalUsers || 0}\n> Orders Found: ${data.totalOrders || 0}\n> Emails sent successfully.`;
+                    statusBox.innerHTML = `> Success!\n> Sent to: ${data.recipient}\n> Date: ${data.date}\n> Work orders found: ${data.ordersFound}\n> Total time: ${data.totalDuration}`;
                 } else {
                     throw new Error(data.error || 'Server error');
                 }

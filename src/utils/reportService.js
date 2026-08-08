@@ -50,9 +50,12 @@ function calculateDailyDuration(timeIn, timeOut, pauseHistory, dayStartMs, dayEn
                     intervals.push([currentStart, event.at]);
                     currentStart = null;
                 }
-            } else if (event.type === 'resume' || event.type === 'end') {
+            } else if (event.type === 'resume') {
                 currentStart = event.at;
             }
+            // 'end' is a terminal marker, not a resume — it must not reopen
+            // an interval, or a work order that was never explicitly paused
+            // collapses to ~0ms for the day.
         });
     }
 
@@ -220,6 +223,82 @@ async function generateDailyReports() {
         console.error('Error generating reports:', error);
         throw error;
     }
+}
+
+/**
+ * Generates and sends a work report for a single user on a single date.
+ * Sent ONLY to that user's own email — no admin copy, no other recipients.
+ */
+async function generateReportForUser(userId, dateStr) {
+    if (!userId) throw new Error('user_id is required');
+    if (!dateStr) throw new Error('date is required');
+
+    const dayStart = new Date(`${dateStr}T00:00:00`);
+    if (isNaN(dayStart.getTime())) throw new Error('Invalid date');
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
+    const { data: user, error: userErr } = await supabase
+        .from('users')
+        .select('id, name, username')
+        .eq('id', userId)
+        .single();
+
+    if (userErr || !user) throw new Error('User not found');
+    if (!user.username || !user.username.includes('@')) {
+        throw new Error(`${user.name || 'This user'} has no valid email on file`);
+    }
+
+    const { data: workOrders, error: woError } = await supabase
+        .from('work_orders')
+        .select(`
+            *,
+            users (name, username),
+            job_orders (title)
+        `)
+        .lt('time_in', dayEnd.toISOString())
+        .or(`time_out.is.null,time_out.gte.${dayStart.toISOString()}`);
+
+    if (woError) throw woError;
+
+    const dayStartMs = dayStart.getTime();
+    const dayEndMs = dayEnd.getTime();
+
+    const relevantOrders = (workOrders || [])
+        .filter(order => order.user_id === userId || (Array.isArray(order.tagged_user_ids) && order.tagged_user_ids.includes(userId)))
+        .map(order => {
+            const dailyMs = calculateDailyDuration(order.time_in, order.time_out, order.pause_history, dayStartMs, dayEndMs);
+            return { ...order, _dailyMs: dailyMs, _isTagged: order.user_id !== userId };
+        })
+        .filter(order => order._dailyMs > 0);
+
+    const logoPath = path.join(__dirname, '../../public/assets/a360b.png');
+    const attachments = [];
+    if (fs.existsSync(logoPath)) {
+        attachments.push({ filename: 'a360b.png', path: logoPath, cid: 'a360logo' });
+    }
+
+    const dateLabel = dayStart.toLocaleDateString();
+    const subject = `Work Summary - ${user.name} - ${dateLabel}`;
+
+    let html;
+    if (relevantOrders.length === 0) {
+        html = generateNoActivityHtml(dayStart, user.name);
+    } else {
+        const report = { name: user.name, email: user.username, orders: relevantOrders };
+        html = generateUserHtml(report, dayStart);
+    }
+
+    await sendEmail(user.username, subject, html, attachments);
+
+    const totalMs = relevantOrders.reduce((sum, o) => sum + o._dailyMs, 0);
+    return {
+        success: true,
+        recipient: user.username,
+        date: dateStr,
+        ordersFound: relevantOrders.length,
+        totalDuration: formatDuration(totalMs)
+    };
 }
 
 /**
@@ -500,7 +579,8 @@ function generateProgressReportHtml(jobOrder, userMap, allCompleted) {
     </div>`;
 }
 
-function generateUserHtml(report) {
+function generateUserHtml(report, forDate) {
+    const dateObj = forDate || new Date();
     const totalMs = report.orders.reduce((sum, o) => sum + o._dailyMs, 0);
     const rows = report.orders.map(o => `
         <tr>
@@ -527,8 +607,8 @@ function generateUserHtml(report) {
                 <tr>
                     <td style="vertical-align: top;">
                         <h2 style="color: #6366f1; margin: 0; font-size: 24px;">Hello, ${report.name}!</h2>
-                        <p style="margin: 8px 0 0; color: #666; font-size: 15px;">Here is your daily work summary for today:</p>
-                        <p style="margin: 4px 0 0; color: #111; font-weight: bold; font-size: 15px;">${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        <p style="margin: 8px 0 0; color: #666; font-size: 15px;">Here is your work summary for:</p>
+                        <p style="margin: 4px 0 0; color: #111; font-weight: bold; font-size: 15px;">${dateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                     </td>
                     <td style="vertical-align: top; text-align: right;">
                         <img src="cid:a360logo" alt="a360" style="height: 45px; width: auto;">
@@ -551,7 +631,7 @@ function generateUserHtml(report) {
 
             <table style="width: 100%; border-collapse: collapse; margin-top: 25px; background: #fdfdff; border: 1px solid #edf0f5; border-radius: 10px;">
                 <tr>
-                    <td style="padding: 20px; font-size: 18px; font-weight: 600; color: #000000ff;">Total Hours Today</td>
+                    <td style="padding: 20px; font-size: 18px; font-weight: 600; color: #000000ff;">Total Hours</td>
                     <td style="padding: 20px; text-align: right; font-size: 18px; font-weight: 600; color: #000000ff;">${formatDuration(totalMs)}</td>
                 </tr>
             </table>
@@ -564,15 +644,16 @@ function generateUserHtml(report) {
     `;
 }
 
-function generateNoActivityHtml() {
+function generateNoActivityHtml(forDate, forName) {
+    const dateObj = forDate || new Date();
     return `
         <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #eef0f2; border-radius: 12px; padding: 30px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
                 <tr>
                     <td style="vertical-align: top;">
-                        <h2 style="color: #6366f1; margin: 0; font-size: 24px;">Daily Summary</h2>
-                        <p style="margin: 8px 0 0; color: #666; font-size: 15px;">Status report for today:</p>
-                        <p style="margin: 4px 0 0; color: #111; font-weight: bold; font-size: 15px;">${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        <h2 style="color: #6366f1; margin: 0; font-size: 24px;">${forName ? `Hello, ${forName}!` : 'Daily Summary'}</h2>
+                        <p style="margin: 8px 0 0; color: #666; font-size: 15px;">Status report for:</p>
+                        <p style="margin: 4px 0 0; color: #111; font-weight: bold; font-size: 15px;">${dateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                     </td>
                     <td style="vertical-align: top; text-align: right;">
                         <img src="cid:a360logo" alt="a360" style="height: 45px; width: auto;">
@@ -581,7 +662,7 @@ function generateNoActivityHtml() {
             </table>
 
             <div style="padding: 40px 20px; text-align: center; background: #f8f9fb; border-radius: 8px; border: 1px dashed #cbd5e1; margin-bottom: 25px;">
-                <p style="font-size: 16px; color: #64748b; margin: 0;">No work orders were logged for today.</p>
+                <p style="font-size: 16px; color: #64748b; margin: 0;">No work orders were logged for this date.</p>
             </div>
 
             <div style="margin-top: 35px; padding-top: 20px; border-top: 1px solid #eee; text-align: center;">
@@ -594,6 +675,7 @@ function generateNoActivityHtml() {
 
 module.exports = {
     generateDailyReports,
+    generateReportForUser,
     sendProgressReport,
     calculateDuration,
     calculateDailyDuration,

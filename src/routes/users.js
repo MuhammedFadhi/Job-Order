@@ -53,12 +53,24 @@ router.post('/', async (req, res) => {
     res.status(201).json(data[0]);
 });
 
-// PUT update user (e.g. for color_code)
+// PUT update user (color_code and/or name)
 router.put('/:id', async (req, res) => {
-    const { color_code } = req.body;
+    const { color_code, name } = req.body;
+
+    const updateFields = {};
+    if (color_code !== undefined) updateFields.color_code = color_code;
+    if (name !== undefined) {
+        if (!name.trim()) return res.status(400).json({ error: 'Name cannot be empty' });
+        updateFields.name = name.trim();
+    }
+
+    if (Object.keys(updateFields).length === 0) {
+        return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
     const { data, error } = await supabase
         .from('users')
-        .update({ color_code })
+        .update(updateFields)
         .eq('id', req.params.id)
         .select();
 

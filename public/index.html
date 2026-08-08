@@ -4,8 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Management</title>
+    <script>
+        // Apply saved theme + sidebar collapse state before first paint to
+        // avoid a flash of the wrong theme / a full-width sidebar snapping shut
+        (function() {
+            var theme = localStorage.getItem('theme') || 'dark';
+            if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+            if (localStorage.getItem('sidebarCollapsed') === '1') {
+                document.documentElement.setAttribute('data-sidebar', 'collapsed');
+            }
+        })();
+    </script>
     <link rel="icon" type="image/png" href="assets/fav_a360.png">
-    <link rel="stylesheet" href="styles.css?v=8">
+    <link rel="stylesheet" href="styles.css?v=17">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -17,66 +28,112 @@
         <div class="orb orb-2"></div>
     </div>
 
-        <header id="main-nav-header" class="dashboard-header hidden-view">
-            <div class="header-main">
-                <div class="header-logo" id="btn-logo-home" style="cursor:pointer;" title="Go to Dashboard">
-                    <img src="assets/a360w.png" alt="a360 Logo" class="nav-brand-logo">
-                </div>
-                <div id="active-work-stopwatch" class="stopwatch-container hidden">
-                    <div class="stopwatch-indicator">
-                        <div class="pulse-dot"></div>
-                        <span class="active-label">Active:</span>
-                    </div>
-                    <div class="stopwatch-info">
-                        <span id="stopwatch-job" class="mono">JB-XXXX</span>
-                        <span class="divider">/</span>
-                        <span id="stopwatch-wo" class="mono">WO-XXXX</span>
-                        <span id="stopwatch-desc" class="desc-text">Description</span>
-                    </div>
-                    <div class="stopwatch-controls">
-                        <button id="btn-pause-stopwatch" class="btn-pause" title="Pause/Resume">
-                            <i class="fa-solid fa-pause"></i>
-                        </button>
-                        <div class="stopwatch-timer-wrap">
-                            <span id="stopwatch-time" class="time-display">00:00:00</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="user-profile-nav">
-                    <div class="user-info">
-                        <div style="position: relative; display: inline-block;">
-                            <div class="avatar-sm" id="current-user-avatar" style="cursor: pointer;">?</div>
-                            <input type="color" id="user-color-picker" title="Change Avatar Color" value="#6366f1" style="position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer;" />
-                        </div>
-                        <div class="user-meta">
-                            <span id="current-user-name">User Name</span>
-                        </div>
-                    </div>
-                    <div class="my-work-nav" id="my-work-nav-link">
-                        <button class="btn-nav-item" id="btn-goto-my-work" title="My Work Orders">
-                            <i class="fa-solid fa-list-check"></i>
-                            <span>My Work Orders</span>
-                        </button>
-                    </div>
-                    <div class="admin-nav hidden" id="admin-nav-link">
-                        <button class="btn-nav-item" id="btn-goto-admin" title="Admin Dashboard">
-                            <i class="fa-solid fa-gauge-high"></i>
-                            <span>Admin</span>
-                        </button>
-                    </div>
-                    <button class="btn-logout" id="btn-logout" title="Logout">
-                        <i class="fa-solid fa-right-from-bracket"></i>
+        <button class="sidebar-toggle hidden-view" id="btn-sidebar-toggle" aria-label="Toggle navigation">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+        <div class="sidebar-scrim" id="sidebar-scrim"></div>
+
+        <aside id="main-nav-header" class="sidebar hidden-view">
+            <div class="sidebar-brand" id="btn-logo-home" title="Go to Dashboard">
+                <img src="assets/a360w.png" alt="a360 Logo" class="nav-brand-logo logo-dark">
+                <img src="assets/a360b.png" alt="a360 Logo" class="nav-brand-logo logo-light">
+                <img src="assets/fav_a360.png" alt="a360" class="logo-collapsed">
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="sidebar-link" id="btn-goto-dashboard" title="Dashboard">
+                    <i class="fa-solid fa-chart-simple"></i><span>Dashboard</span>
+                </button>
+
+                <button class="sidebar-link" id="btn-goto-job-orders" title="Job Orders">
+                    <i class="fa-solid fa-briefcase"></i><span>Job Orders</span>
+                </button>
+
+                <div id="my-work-nav-link">
+                    <button class="sidebar-link" id="btn-goto-my-work" title="My Work Orders">
+                        <i class="fa-solid fa-list-check"></i><span>My Work Orders</span>
                     </button>
                 </div>
+
+                <div class="hidden" id="admin-nav-link">
+                    <div class="sidebar-section-label">Admin</div>
+                    <button class="sidebar-link sidebar-sub" id="btn-admin-tab-all" data-tab="all" title="Work Order Summaries">
+                        <i class="fa-solid fa-list-ul"></i><span>Work Orders</span>
+                    </button>
+                    <button class="sidebar-link sidebar-sub" id="btn-admin-tab-jobs" data-tab="jobs" title="Job Summaries">
+                        <i class="fa-solid fa-briefcase"></i><span>Job Summaries</span>
+                    </button>
+                    <button class="sidebar-link sidebar-sub" id="btn-admin-tab-customers" data-tab="customers" title="Clients">
+                        <i class="fa-solid fa-building"></i><span>Clients</span>
+                    </button>
+                </div>
+
+                <button class="sidebar-link" id="btn-goto-settings" title="Settings">
+                    <i class="fa-solid fa-gear"></i><span>Settings</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-theme-wrap">
+                <button type="button" class="theme-toggle-single" id="theme-toggle" title="Switch to Light Mode">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
             </div>
-        </header>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div style="position: relative; display: inline-block;">
+                        <div class="avatar-sm" id="current-user-avatar" style="cursor: pointer;">?</div>
+                        <input type="color" id="user-color-picker" title="Change Avatar Color" value="#6366f1" style="position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer;" />
+                    </div>
+                    <div class="user-meta">
+                        <span id="current-user-name">User Name</span>
+                    </div>
+                </div>
+                <button class="btn-logout" id="btn-logout" title="Logout">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </button>
+            </div>
+        </aside>
+
+        <button class="sidebar-collapse-toggle hidden-view" id="btn-sidebar-collapse" title="Collapse sidebar">
+            <i class="fa-solid fa-chevron-left"></i>
+        </button>
+
+        <!-- Active work stopwatch — fixed top-right icon, shown on every authenticated
+             page. Clicking it reveals the popover with the same anchoring approach as
+             .sidebar-collapse-toggle (fixed sibling, positioned via JS at open time). -->
+        <button type="button" class="stopwatch-icon-btn hidden-view hidden" id="btn-stopwatch-icon" title="View active work order">
+            <i class="fa-solid fa-stopwatch"></i>
+            <span class="stopwatch-icon-dot"></span>
+        </button>
+        <div id="active-work-stopwatch" class="stopwatch-popover">
+            <div class="stopwatch-indicator">
+                <div class="pulse-dot"></div>
+                <span class="active-label">Active:</span>
+            </div>
+            <div class="stopwatch-info">
+                <span id="stopwatch-job" class="mono">JB-XXXX</span>
+                <span class="divider">/</span>
+
+                <span id="stopwatch-wo" class="mono">WO-XXXX</span>
+                <span id="stopwatch-desc" class="desc-text">Description</span>
+            </div>
+            <div class="stopwatch-controls">
+                <button id="btn-pause-stopwatch" class="btn-pause" title="Pause/Resume">
+                    <i class="fa-solid fa-pause"></i>
+                </button>
+                <div class="stopwatch-timer-wrap">
+                    <span id="stopwatch-time" class="time-display">00:00:00</span>
+                </div>
+            </div>
+        </div>
 
         <!-- 1. Login View -->
         <main id="login-view" class="view">
             <div class="glass-card login-card auth-card">
                 <div class="auth-logo">
-                    <img src="assets/a360w.png" alt="a360 Logo" class="auth-brand-logo">
+                    <img src="assets/a360w.png" alt="a360 Logo" class="auth-brand-logo logo-dark">
+                    <img src="assets/a360b.png" alt="a360 Logo" class="auth-brand-logo logo-light">
                 </div>
                 <h2>Welcome Back</h2>
                 <p>Enter your credentials to access the system.</p>
@@ -107,7 +164,8 @@
         <main id="register-view" class="view hidden-view">
             <div class="glass-card login-card auth-card">
                 <div class="auth-logo">
-                    <img src="assets/a360w.png" alt="a360 Logo" class="auth-brand-logo">
+                    <img src="assets/a360w.png" alt="a360 Logo" class="auth-brand-logo logo-dark">
+                    <img src="assets/a360b.png" alt="a360 Logo" class="auth-brand-logo logo-light">
                 </div>
                 <h2>Create Account</h2>
                 <p>Sign up to get started.</p>
@@ -143,8 +201,147 @@
             <div class="dashboard-content">
                 <header class="section-header">
                     <div class="header-text">
+                        <nav class="breadcrumb">
+                            <span class="breadcrumb-current">Dashboard</span>
+                        </nav>
                         <!-- <h1>a360 Command Center</h1>
                         <p>Real-time visibility for job requests and workflows.</p> -->
+                    </div>
+                </header>
+
+                <!-- Overview Stats -->
+                <div class="dashboard-stats-grid" id="dashboard-stats-grid">
+                    <div class="stat-card" onclick="navigateTo('jobOrders')" title="View all Job Orders">
+                        <div class="stat-card-icon" style="background: rgba(99,102,241,0.15); color: var(--accent-primary);"><i class="fa-solid fa-briefcase"></i></div>
+                        <div class="stat-card-info">
+                            <span class="stat-card-value" id="stat-total-jobs">0</span>
+                            <span class="stat-card-label">Total Job Orders</span>
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="navigateTo('jobOrders', {status: 'open'})" title="View active Job Orders">
+                        <div class="stat-card-icon" style="background: rgba(245,158,11,0.15); color: var(--warning);"><i class="fa-solid fa-folder-open"></i></div>
+                        <div class="stat-card-info">
+                            <span class="stat-card-value" id="stat-active-jobs">0</span>
+                            <span class="stat-card-label">Active Job Orders</span>
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="navigateToWorkOrders('all')" title="View all Work Orders">
+                        <div class="stat-card-icon" style="background: rgba(99,102,241,0.15); color: var(--accent-primary);"><i class="fa-solid fa-list-check"></i></div>
+                        <div class="stat-card-info">
+                            <span class="stat-card-value" id="stat-total-wo">0</span>
+                            <span class="stat-card-label">Total Work Orders</span>
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="navigateToWorkOrders('pending')" title="View pending Work Orders">
+                        <div class="stat-card-icon" style="background: rgba(148,163,184,0.15); color: var(--text-secondary);"><i class="fa-regular fa-clock"></i></div>
+                        <div class="stat-card-info">
+                            <span class="stat-card-value" id="stat-pending-wo">0</span>
+                            <span class="stat-card-label">Pending Work Orders</span>
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="navigateToWorkOrders('ongoing')" title="View in-progress Work Orders">
+                        <div class="stat-card-icon" style="background: rgba(245,158,11,0.15); color: var(--warning);"><i class="fa-solid fa-spinner"></i></div>
+                        <div class="stat-card-info">
+                            <span class="stat-card-value" id="stat-inprogress-wo">0</span>
+                            <span class="stat-card-label">In Progress</span>
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="navigateToWorkOrders('completed')" title="View completed Work Orders">
+                        <div class="stat-card-icon" style="background: rgba(16,185,129,0.15); color: var(--success);"><i class="fa-solid fa-circle-check"></i></div>
+                        <div class="stat-card-info">
+                            <span class="stat-card-value" id="stat-completed-wo">0</span>
+                            <span class="stat-card-label">Completed Work Orders</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analytics Panels -->
+                <div class="dashboard-charts-grid">
+                    <div class="chart-panel">
+                        <div class="chart-panel-header">
+                            <h4><i class="fa-solid fa-users" id="chart-user-hours-icon"></i> <span id="chart-user-hours-title">Team Work Hours</span></h4>
+                            <div class="chart-period-tabs" id="user-hours-period-tabs">
+                                <button class="chart-period-btn" data-period="today">Today</button>
+                                <button class="chart-period-btn" data-period="week">This Week</button>
+                                <button class="chart-period-btn" data-period="month">This Month</button>
+                                <button class="chart-period-btn active" data-period="all">All Time</button>
+                            </div>
+                        </div>
+                        <div class="chart-panel-body">
+                            <canvas id="chart-user-hours"></canvas>
+                            <p class="chart-empty-msg hidden" id="chart-user-hours-empty">No logged time for this period yet.</p>
+                        </div>
+                    </div>
+
+                    <div class="chart-panel">
+                        <div class="chart-panel-header">
+                            <h4><i class="fa-solid fa-chart-line"></i> Activity — Last 14 Days</h4>
+                        </div>
+                        <div class="chart-panel-body">
+                            <canvas id="chart-trend"></canvas>
+                            <p class="chart-empty-msg hidden" id="chart-trend-empty">No activity logged in the last 14 days.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- My Active Work -->
+                <div class="glass-card dt-card" style="margin-top: 0.5rem;">
+                    <div class="dt-header">
+                        <span class="dt-dot"></span>
+                        <h3>My Active Work</h3>
+                    </div>
+                    <div class="dt-controls">
+                        <label class="dt-show">
+                            Show
+                            <select id="dt-page-size">
+                                <option value="5">5</option>
+                                <option value="10" selected>10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                            </select>
+                        </label>
+                        <label class="dt-search">
+                            Search
+                            <input type="text" id="dt-search" placeholder="">
+                        </label>
+                    </div>
+                    <div class="dt-scroll">
+                        <table class="dt-table">
+                            <thead>
+                                <tr>
+                                    <th>Work Order</th>
+                                    <th>Job Order</th>
+                                    <th>Worked</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dashboard-my-work-list">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="dt-footer">
+                        <span id="dt-entries-info">Showing 0 to 0 of 0 entries</span>
+                        <div class="dt-pagination">
+                            <button type="button" class="btn-page" id="dt-prev">&lt; Previous</button>
+                            <button type="button" class="btn-page" id="dt-next">Next &gt;</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <!-- 2.2 Job Orders View -->
+        <main id="job-orders-view" class="view hidden-view">
+            <div class="dashboard-content">
+                <header class="section-header">
+                    <div class="header-text">
+                        <nav class="breadcrumb">
+                            <span class="breadcrumb-current">Job Orders</span>
+                        </nav>
+                        <h1>Job Orders</h1>
+                        <p>Browse and manage all job orders.</p>
                     </div>
                 </header>
 
@@ -154,7 +351,7 @@
                         <i class="fa-solid fa-magnifying-glass"></i>
                         <input type="text" id="jo-search-input" placeholder="Search by Job ID, Title, or Client...">
                     </div>
-                    
+
                     <!-- Spacer to push items to the right -->
                     <div style="flex: 1;"></div>
 
@@ -174,6 +371,12 @@
                     </button>
                 </div>
 
+                <!-- Filter banner (shown when arriving via a filtered dashboard card link) -->
+                <div class="jo-filter-banner hidden" id="jo-filter-banner">
+                    <span><i class="fa-solid fa-filter"></i> Showing: <strong id="jo-filter-label">Active Job Orders</strong></span>
+                    <button type="button" class="breadcrumb-link" id="btn-clear-jo-filter">Clear filter</button>
+                </div>
+
                 <!-- Active Jobs -->
                 <div class="section-header small" style="margin-top: 1rem; margin-bottom: 1rem;">
                     <h3>Active Jobs</h3>
@@ -183,19 +386,24 @@
                 </div>
 
                 <!-- Completed Jobs -->
-                <div class="section-header small" style="margin-bottom: 1rem;">
+                <div class="section-header small" style="margin-bottom: 1rem;" id="jo-completed-section-header">
                     <h3>Completed Jobs</h3>
                 </div>
                 <div id="completed-job-orders-container" class="grid-container">
                 </div>
             </div>
-        </main> 
+        </main>
 
         <!-- 2.5 Admin View -->
         <main id="admin-view" class="view hidden-view">
-            <header class="dashboard-header">
+            <header class="dashboard-header job-detail-header">
                 <div class="header-main">
                     <div class="header-text">
+                        <nav class="breadcrumb">
+                            <span class="breadcrumb-parent">Admin</span>
+                            <i class="fa-solid fa-chevron-right"></i>
+                            <span class="breadcrumb-current" id="breadcrumb-admin-tab">Work Orders</span>
+                        </nav>
                         <h1>Admin Dashboard</h1>
                         <p>Monitor all work orders and system activity.</p>
                     </div>
@@ -225,6 +433,7 @@
                                 <i class="fa-solid fa-list-check"></i>
                                 <select id="admin-status-filter" class="admin-date-input">
                                     <option value="all">All Statuses</option>
+                                    <option value="pending">Pending</option>
                                     <option value="ongoing">In Progress</option>
                                     <option value="completed">Completed</option>
                                 </select>
@@ -320,7 +529,7 @@
                 <div style="padding:1.25rem 1.5rem; display:flex; flex-direction:column; gap:1rem;">
                     <p style="color:#aaa; font-size:0.9rem;">The following work orders will be automatically marked as <strong style="color:#22c55e;">Tested: Pass</strong> and <strong style="color:#22c55e;">Completed</strong>.</p>
                     <div id="cjm-wo-list" style="display:flex; flex-direction:column; gap:0.5rem; max-height:240px; overflow-y:auto;"></div>
-                    <div style="background:rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.3); border-radius:10px; padding:0.75rem 1rem; font-size:0.85rem; color:#a5b4fc;">
+                    <div style="background:rgba(99, 102, 241,0.1); border:1px solid rgba(99, 102, 241,0.3); border-radius:10px; padding:0.75rem 1rem; font-size:0.85rem; color:#a5b4fc;">
                         <i class="fa-solid fa-circle-info"></i> A sign-off report will be sent to the client after confirmation.
                     </div>
                     <div style="display:flex; justify-content:flex-end; gap:0.75rem; padding-top:0.25rem;">
@@ -378,11 +587,13 @@
             </div>
         </div>
 
-        <!-- 2.7 My Work View -->
         <main id="my-work-view" class="view hidden-view">
-            <header class="dashboard-header">
+            <header class="dashboard-header job-detail-header">
                 <div class="header-main">
                     <div class="header-text">
+                        <nav class="breadcrumb">
+                            <span class="breadcrumb-current">My Work Orders</span>
+                        </nav>
                         <h1>My Work Orders</h1>
                         <p>Track your assignments and logged time.</p>
                     </div>
@@ -402,6 +613,7 @@
                 <div class="admin-tabs-container">
                     <div class="admin-tabs" id="mywork-tabs">
                         <button class="tab-btn active" data-tab="all">All My Work</button>
+                        <button class="tab-btn" data-tab="pending">Pending</button>
                         <button class="tab-btn" data-tab="ongoing">In Progress</button>
                         <button class="tab-btn" data-tab="completed">Completed</button>
                     </div>
@@ -506,57 +718,82 @@
         </div>
 
         <!-- 4. Job Order Detail Modal (for Work Orders) -->
-        <div id="job-detail-modal" class="modal-overlay hidden">
-            <div class="glass-card modal-content modal-large">
-                <div class="modal-header">
-                    <div class="job-detail-title">
-                        <h2 id="jd-title">Loading...</h2>
-                        <span id="jd-id" class="badge">JB-XXXX</span>
-                        <span id="jd-status" class="badge status-open">Open</span>
+        <!-- 4.5 Job Detail View -->
+        <main id="job-detail-view" class="view hidden-view">
+            <div class="dashboard-content">
+                <header class="dashboard-header job-detail-header">
+                    <button class="btn btn-outline btn-sm" id="btn-back-to-jobs-from-detail">
+                        <i class="fa-solid fa-arrow-left"></i> Back to Job Orders
+                    </button>
+                    <div class="header-main">
+                        <div class="header-text">
+                            <nav class="breadcrumb">
+                                <span class="breadcrumb-link" onclick="goToJobOrders()">Job Orders</span>
+                                <i class="fa-solid fa-chevron-right"></i>
+                                <span class="breadcrumb-current" id="breadcrumb-job-title">Loading...</span>
+                            </nav>
+                            <div class="job-detail-title">
+                                <h1 id="jd-title">Loading...</h1>
+                                <span id="jd-id" class="badge">JB-XXXX</span>
+                                <span id="jd-status" class="badge status-open">Open</span>
+                            </div>
+                        </div>
+                        <div class="header-actions">
+                            <button class="btn btn-outline btn-sm" id="btn-edit-job" title="Edit Job Order">
+                                <i class="fa-solid fa-pen-to-square"></i> Edit
+                            </button>
+                            <button class="btn btn-outline btn-sm" id="btn-send-report">
+                                <i class="fa-solid fa-paper-plane"></i> Send Report
+                            </button>
+                            <button class="btn btn-success btn-sm" id="btn-close-job">
+                                <i class="fa-solid fa-circle-check"></i> Mark Job Complete
+                            </button>
+                        </div>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <button class="btn btn-outline btn-sm" id="btn-edit-job" title="Edit Job Order">
-                            <i class="fa-solid fa-pen-to-square"></i> Edit
-                        </button>
-                        <button class="btn btn-icon btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
-                    </div>
-                </div>
-                
+                </header>
+
                 <div class="job-meta-grid">
                     <div class="meta-item">
-                        <span class="meta-label">Client</span>
+                        <span class="meta-label"><i class="fa-solid fa-building"></i>Client</span>
                         <span class="meta-val" id="jd-customer">-</span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">Assigned To</span>
+                        <span class="meta-label"><i class="fa-solid fa-users"></i>Assigned To</span>
                         <span class="meta-val" id="jd-assigned">-</span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">Priority</span>
+                        <span class="meta-label"><i class="fa-solid fa-flag"></i>Priority</span>
                         <span class="meta-val" id="jd-priority">-</span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">Date Created</span>
+                        <span class="meta-label"><i class="fa-solid fa-calendar"></i>Date Created</span>
                         <span class="meta-val" id="jd-date">-</span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">Total Duration</span>
+                        <span class="meta-label"><i class="fa-solid fa-clock"></i>Total Duration</span>
                         <span class="meta-val" id="jd-total-time" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--accent-primary);">0h 0m</span>
                     </div>
                 </div>
 
-                <div class="job-desc">
-                    <span class="meta-label">Description</span>
+                <div class="job-desc" id="jd-desc-wrap">
+                    <span class="meta-label"><i class="fa-solid fa-align-left"></i>Description</span>
                     <p id="jd-desc">-</p>
                 </div>
 
-                <div class="divider"></div>
-
-                <div class="section-header small">
-                    <h3>Work Orders</h3>
-                    <button class="btn btn-outline btn-sm" id="btn-new-work">
-                        <i class="fa-solid fa-plus"></i> Add Work
-                    </button>
+                <div class="section-header small" style="margin-bottom: 1rem;">
+                    <div style="display:flex; align-items:center; gap:0.6rem;">
+                        <h3 style="margin:0;">Work Orders</h3>
+                    </div>
+                    <div id="jd-wo-tabs" style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                        <button class="tab-btn active" data-tab="brief">Work Orders</button>
+                        <button class="tab-btn hidden-view" data-tab="full">Details</button>
+                        <button class="btn btn-outline btn-sm hidden-view" id="btn-toggle-all-wo" onclick="handleToggleAllJobWorkOrders()" style="margin-left:0.25rem;">
+                            <i class="fa-solid fa-pause"></i> Pause All
+                        </button>
+                        <button class="btn btn-primary btn-sm" id="btn-new-work" style="margin-left:0.25rem;">
+                            <i class="fa-solid fa-plus"></i> Add Work
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Create Work Order Form (Hidden by default, admin only) -->
@@ -595,16 +832,77 @@
                 <div id="work-orders-list" class="work-orders-list">
                     <!-- Populated via JS -->
                 </div>
+            </div>
+        </main>
 
-                <div class="modal-footer mt-4">
-                    <button type="button" class="btn btn-outline btn-close-modal">Close</button>
-                    <button type="button" class="btn btn-outline" id="btn-send-report" style="color: #6366f1; border-color: #6366f1;">
-                        <i class="fa-solid fa-paper-plane"></i> Send Report
-                    </button>
-                    <button type="button" class="btn btn-success" id="btn-close-job">Mark Job Complete</button>
+        <!-- Work Order Detail Drawer -->
+        <div class="wo-drawer-scrim" id="wo-drawer-scrim"></div>
+        <aside class="wo-drawer" id="wo-drawer">
+            <div class="wo-drawer-header">
+                <h3>Work Order Details</h3>
+                <button type="button" class="btn btn-icon btn-sm" id="btn-close-wo-drawer" title="Close">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="wo-drawer-body" id="wo-drawer-body">
+                <!-- Populated via JS -->
+            </div>
+        </aside>
+
+        <!-- 4.7 Settings View -->
+        <main id="settings-view" class="view hidden-view">
+            <div class="dashboard-content">
+                <header class="dashboard-header">
+                    <div class="header-main">
+                        <div class="header-text">
+                            <nav class="breadcrumb">
+                                <span class="breadcrumb-current">Settings</span>
+                            </nav>
+                            <h1>Settings</h1>
+                            <p>Manage your profile and account preferences.</p>
+                        </div>
+                    </div>
+                </header>
+
+                <div class="glass-card settings-profile-card">
+                    <div class="settings-avatar-row">
+                        <div class="settings-avatar-wrap">
+                            <div class="avatar-lg" id="settings-user-avatar">?</div>
+                            <input type="color" id="settings-color-picker" title="Change Avatar Color" class="avatar-color-input" value="#6366f1">
+                            <div class="avatar-edit-badge"><i class="fa-solid fa-pen"></i></div>
+                        </div>
+                        <div>
+                            <h2 id="settings-name-preview">User Name</h2>
+                            <p class="text-muted" id="settings-username-preview">username</p>
+                        </div>
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <form id="settings-profile-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Display Name</label>
+                                <input type="text" id="settings-name-input" required placeholder="Your name">
+                            </div>
+                            <div class="form-group">
+                                <label>Role</label>
+                                <input type="text" id="settings-role-input" disabled>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Username</label>
+                            <input type="text" id="settings-username-input" disabled>
+                        </div>
+                        <div class="form-actions row-right">
+                            <button type="submit" class="btn btn-primary" id="btn-save-settings-profile">
+                                <i class="fa-solid fa-check"></i> Save Changes
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
-        </div>
+        </main>
 
         <!-- 5. Edit Job Order Modal -->
         <div id="edit-job-modal" class="modal-overlay hidden">
@@ -722,7 +1020,8 @@
         </div>
     </footer>
 
-    <script src="app.js?v=11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="app.js?v=23"></script>
     <div id="job-brief-print-area"></div>
 </body>
 </html>

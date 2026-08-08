@@ -4,7 +4,7 @@ const cors = require('cors');
 const path = require('path');       
 const supabase = require('./supabaseClient');
 const cron = require('node-cron');
-const { generateDailyReports } = require('./utils/reportService');
+const { generateDailyReports, generateReportForUser } = require('./utils/reportService');
 
 const app = express();
 const jobOrdersRouter = require('./routes/jobOrders');
@@ -63,6 +63,22 @@ app.post('/api/test-email', async (req, res) => {
         res.json(result);
     } catch (error) {
         console.error('Test email failed:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Send a work report for a single user on a single date — goes only to that
+// user's own email, no admin copy and no blast to everyone else.
+app.post('/api/test-email/user', async (req, res) => {
+    try {
+        const { user_id, date } = req.body;
+        if (!user_id || !date) {
+            return res.status(400).json({ error: 'user_id and date are required' });
+        }
+        const result = await generateReportForUser(user_id, date);
+        res.json(result);
+    } catch (error) {
+        console.error('Targeted test email failed:', error);
         res.status(500).json({ error: error.message });
     }
 });
