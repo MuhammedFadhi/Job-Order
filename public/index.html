@@ -798,12 +798,22 @@
 
                 <!-- Create Work Order Form (Hidden by default, admin only) -->
                 <form id="new-work-form" class="glass-panel hidden">
-                    <h4>New Work Order</h4>
-                    <div class="form-group">
+                    <div style="display:flex; align-items:center; justify-content:space-between;">
+                        <h4 style="margin:0;">New Work Order</h4>
+                        <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.8rem; font-weight:500; cursor:pointer;">
+                            <input type="checkbox" id="nw-bulk-toggle">
+                            Bulk paste
+                        </label>
+                    </div>
+                    <div class="form-group" id="nw-single-fields">
                         <label>Description</label>
                         <input type="text" id="nw-desc" required placeholder="Describe the task...">
                     </div>
-                    <div class="form-group">
+                    <div class="form-group hidden" id="nw-bulk-fields">
+                        <label>Paste list (one work order per line)</label>
+                        <textarea id="nw-bulk-desc" rows="6" placeholder="1. Lead - upload multiple photos at once&#10;2. Lead - show preview of photo&#10;3. Project - commission entry doesn't accept 2 decimal places"></textarea>
+                    </div>
+                    <div class="form-group" id="nw-estimate-group">
                         <label>Estimate Time</label>
                         <div style="display:flex; flex-direction:row; flex-wrap:nowrap; gap: 0.75rem;">
                             <div style="position:relative; width:110px;">
@@ -824,7 +834,7 @@
                     </div>
                     <div class="form-actions row-right">
                         <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-work">Cancel</button>
-                        <button type="submit" class="btn btn-primary btn-sm">Create Work Order</button>
+                        <button type="submit" class="btn btn-primary btn-sm" id="btn-submit-work">Create Work Order</button>
                     </div>
                 </form>
 

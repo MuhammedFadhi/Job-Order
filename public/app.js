@@ -483,7 +483,13 @@ function setupEventListeners() {
     document.getElementById('btn-cancel-work').addEventListener('click', () => {
         document.getElementById('new-work-form').classList.add('hidden');
         document.getElementById('new-work-form').reset();
+        document.getElementById('nw-bulk-toggle').checked = false;
+        setBulkWorkOrderMode(false);
         document.getElementById('btn-new-work').classList.remove('hidden');
+    });
+
+    document.getElementById('nw-bulk-toggle').addEventListener('change', (e) => {
+        setBulkWorkOrderMode(e.target.checked);
     });
 
     document.getElementById('new-work-form').addEventListener('submit', handleCreateWorkOrder);
@@ -2260,10 +2266,10 @@ function buildTimelineHTML(woId, timeIn, timeOut, serverHistory) {
 
     return `
         <div class="timeline-toggle-wrap">
-            <button type="button" class="btn-timeline-toggle" data-wo-id="${woId}">
-                <i class="fa-solid fa-chevron-right"></i> <span class="timeline-toggle-label">View Time History</span>
+            <button type="button" class="btn-timeline-toggle open" data-wo-id="${woId}">
+                <i class="fa-solid fa-chevron-down"></i> <span class="timeline-toggle-label">Hide Time History</span>
             </button>
-            <div class="time-pipeline hidden" id="pipeline-${woId}">${html}</div>
+            <div class="time-pipeline" id="pipeline-${woId}">${html}</div>
         </div>
     `;
 }
@@ -2286,8 +2292,29 @@ function buildWorkOrderDetailHTML(wo) {
     const woUserId = wo.user_id || (wo.user ? wo.user.id : null);
     const workedMs = isPending ? 0 : calcWorkedTime(wo.id, wo.time_in, wo.time_out, wo.pause_history, woUserId, wo.status);
     const workedStr = isPending ? '—' : formatDuration(workedMs);
-    const estimateStr = formatEstimate(wo.estimate_time);
     const canAct = currentUser && (woUserId === currentUser.id);
+
+    const estHrs  = wo.estimate_time ? Math.floor(wo.estimate_time / 60) : '';
+    const estMins = wo.estimate_time ? wo.estimate_time % 60 : '';
+    const inlineEstHTML = `
+        <span style="display:inline-flex; align-items:center; gap:4px; padding:3px 10px;
+                     border-radius:20px; border:1px solid rgba(255,255,255,0.1);
+                     background:rgba(255,255,255,0.04); font-size:0.78rem; color:#888;">
+            <i class="fa-solid fa-hourglass-half" style="font-size:0.65rem; color:#6366f1;"></i>
+            <span style="color:#666; font-size:0.72rem;">Est</span>
+            <input type="number" min="0" placeholder="0" value="${estHrs}"
+                class="wo-est-input" data-wo-id="${wo.id}" data-field="est-hrs"
+                style="width:34px; padding:2px 5px; border-radius:6px;
+                       border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.06);
+                       color:inherit; font-size:0.78rem; text-align:center; outline:none;">
+            <span style="color:#555; font-size:0.7rem;">hr</span>
+            <input type="number" min="0" max="59" placeholder="0" value="${estMins}"
+                class="wo-est-input" data-wo-id="${wo.id}" data-field="est-mins"
+                style="width:34px; padding:2px 5px; border-radius:6px;
+                       border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.06);
+                       color:inherit; font-size:0.78rem; text-align:center; outline:none;">
+            <span style="color:#555; font-size:0.7rem;">min</span>
+        </span>`;
 
     const testedVal = TESTED_CFG_GLOBAL[wo.tested] ? wo.tested : 'not_tested';
     const { label: tLabel, color: tc } = TESTED_CFG_GLOBAL[testedVal];
@@ -2314,7 +2341,7 @@ function buildWorkOrderDetailHTML(wo) {
     const safeDesc = (wo.description || '').replace(/'/g, "\\'");
 
     return `
-        <div class="work-item ${isActive ? 'active-work' : ''}" style="border:none; background:transparent; padding-left:16px;">
+        <div class="work-item ${isActive ? 'active-work' : ''}" style="border:none; background:transparent;">
             <div class="work-item-body" style="padding:0;">
                 <div class="work-item-top">
                     <div class="work-info">
@@ -2327,9 +2354,7 @@ function buildWorkOrderDetailHTML(wo) {
                         </div>
                         <div class="work-chips">
                             <span class="work-hours"><i class="fa-regular fa-clock"></i> Worked: <strong>${workedStr}</strong></span>
-                            <span style="display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); font-size:0.78rem; color:#888;">
-                                <i class="fa-solid fa-hourglass-half" style="font-size:0.65rem; color:#6366f1;"></i> Est: ${estimateStr}
-                            </span>
+                            ${inlineEstHTML}
                             ${testedSelectHTML}
                         </div>
                     </div>
@@ -2371,6 +2396,12 @@ function openWorkOrderDrawer(woId, silent) {
     openWorkOrderDrawerId = woId;
     const body = document.getElementById('wo-drawer-body');
     if (body) body.innerHTML = buildWorkOrderDetailHTML(wo);
+
+    body?.querySelectorAll('.wo-est-input').forEach(inp => {
+        inp.addEventListener('blur', () => saveWOEstimate(wo.id, inp));
+        inp.addEventListener('focus', () => inp.style.borderColor = '#6366f1');
+        inp.addEventListener('blur', () => inp.style.borderColor = 'rgba(255,255,255,0.1)');
+    });
 
     const testedBtn = body?.querySelector('.wo-tested-btn');
     if (testedBtn) {
@@ -2680,18 +2711,79 @@ function buildTestedPanel(woId, currentVal) {
 // Close dropdowns when clicking outside
 document.addEventListener('click', () => closeAllTestedDropdowns());
 
+function setBulkWorkOrderMode(isBulk) {
+    document.getElementById('nw-single-fields').classList.toggle('hidden', isBulk);
+    document.getElementById('nw-bulk-fields').classList.toggle('hidden', !isBulk);
+    document.getElementById('nw-estimate-group').classList.toggle('hidden', isBulk);
+    document.getElementById('nw-desc').required = !isBulk;
+    document.getElementById('nw-bulk-desc').required = isBulk;
+    document.getElementById('btn-submit-work').textContent = isBulk ? 'Create Work Orders' : 'Create Work Order';
+}
+
+// Splits pasted text into one work order description per line, stripping
+// leading list markers (numbers, bullets, dashes) and invisible paste artifacts.
+function parseBulkWorkOrderLines(raw) {
+    return raw
+        .split('\n')
+        .map(line => line
+            .replace(new RegExp('[\\u200B-\\u200D\\uFEFF\\u2060]', 'g'), '')
+            .replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '')
+            .trim())
+        .filter(line => line.length > 0);
+}
+
 async function handleCreateWorkOrder(e) {
     e.preventDefault();
     if(!currentJobOrder) return;
+
+    // Collect tagged users
+    const taggedIds = Array.from(document.querySelectorAll('#nw-tag-list input:checked'))
+        .map(cb => cb.value);
+
+    const isBulk = document.getElementById('nw-bulk-toggle').checked;
+
+    if (isBulk) {
+        const lines = parseBulkWorkOrderLines(document.getElementById('nw-bulk-desc').value);
+        if (lines.length === 0) {
+            showToast('Paste at least one line to create work orders.', 'error');
+            return;
+        }
+
+        let created = 0;
+        for (const description of lines) {
+            try {
+                const res = await fetch(`${API_BASE}/work-orders`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        description,
+                        ref_id_jo: currentJobOrder.id,
+                        tagged_user_ids: taggedIds,
+                        estimate_time: null
+                        // No user_id — creates as pending/open for any user to start
+                    })
+                });
+                if (res.ok) created++;
+            } catch {
+                // keep creating the remaining lines even if one request fails
+            }
+        }
+
+        if (created > 0) {
+            showToast(`Created ${created} work order${created === 1 ? '' : 's'}${created < lines.length ? ` (${lines.length - created} failed)` : ''}.`, created < lines.length ? 'error' : 'success');
+            document.getElementById('btn-cancel-work').click();
+            openJobDetail(currentJobOrder.id);
+            loadDashboard();
+        } else {
+            showToast('Failed to create work orders.', 'error');
+        }
+        return;
+    }
 
     const desc = document.getElementById('nw-desc').value;
     const nwHrs = parseInt(document.getElementById('nw-est-hrs').value) || 0;
     const nwMins = parseInt(document.getElementById('nw-est-mins').value) || 0;
     const estimateTime = (nwHrs * 60 + nwMins) || null;
-
-    // Collect tagged users
-    const taggedIds = Array.from(document.querySelectorAll('#nw-tag-list input:checked'))
-        .map(cb => cb.value);
 
     try {
         const res = await fetch(`${API_BASE}/work-orders`, {
