@@ -1,39 +1,31 @@
-const nodemailer = require('nodemailer');
-require('dotenv').config();
-
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: process.env.SMTP_PORT || 587,
-    secure: false, // true for 465, false for other ports
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
-});
-
 /**
- * Sends an email with HTML content.
- * @param {string} to - Recipient email.
- * @param {string} subject - Email subject.
- * @param {string} htmlContent - HTML body content.
- * @param {Array} [attachments] - Optional email attachments for CIDs, etc.
+ * Sends an HTML email via the Resend HTTP API.
+ * Workers can't open raw SMTP sockets, so this replaces the old
+ * nodemailer/SMTP transport with a plain fetch() call.
  */
-async function sendEmail(to, subject, htmlContent, attachments = []) {
-    try {
-        const fromEmail = process.env.MAIL_FROM || process.env.SMTP_USER;
-        const info = await transporter.sendMail({
-            from: `"Job Order System" <${fromEmail}>`,
-            to,
+export async function sendEmail(env, to, subject, htmlContent) {
+    const fromEmail = env.MAIL_FROM || 'onboarding@resend.dev';
+
+    const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            from: `Job Order System <${fromEmail}>`,
+            to: [to],
             subject,
             html: htmlContent,
-            attachments: attachments,
-        });
-        console.log(`Email sent to ${to}: ${info.messageId}`);
-        return info;
-    } catch (error) {
-        console.error(`Error sending email to ${to}:`, error);
-        throw error;
-    }
-}
+        }),
+    });
 
-module.exports = { sendEmail };
+    if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`Resend API error (${res.status}): ${errText}`);
+    }
+
+    const info = await res.json();
+    console.log(`Email sent to ${to}: ${info.id}`);
+    return info;
+}

@@ -1,12 +1,10 @@
-const supabase = require('../supabaseClient');
-const { sendEmail } = require('./emailService');
-const path = require('path');
-const fs = require('fs');
+import { getSupabase } from '../supabaseClient.js';
+import { sendEmail } from './emailService.js';
 
 /**
  * Calculates the total duration in milliseconds, excluding pauses.
  */
-function calculateDuration(timeIn, timeOut, pauseHistory) {
+export function calculateDuration(timeIn, timeOut, pauseHistory) {
     if (!timeIn) return 0;
 
     const start = new Date(timeIn).getTime();
@@ -37,7 +35,7 @@ function calculateDuration(timeIn, timeOut, pauseHistory) {
 /**
  * Calculates the duration in milliseconds that falls within a specific day.
  */
-function calculateDailyDuration(timeIn, timeOut, pauseHistory, dayStartMs, dayEndMs) {
+export function calculateDailyDuration(timeIn, timeOut, pauseHistory, dayStartMs, dayEndMs) {
     if (!timeIn) return 0;
 
     const intervals = [];
@@ -79,7 +77,7 @@ function calculateDailyDuration(timeIn, timeOut, pauseHistory, dayStartMs, dayEn
 /**
  * Formats duration in ms to "Xh Ym"
  */
-function formatDuration(ms) {
+export function formatDuration(ms) {
     if (!ms || ms < 0) return '0m';
     const totalMinutes = Math.floor(ms / (1000 * 60));
     const hours = Math.floor(totalMinutes / 60);
@@ -91,11 +89,17 @@ function formatDuration(ms) {
     return `${minutes}m`;
 }
 
+function logoUrl(env) {
+    const base = (env.SITE_URL || '').replace(/\/$/, '');
+    return `${base}/assets/a360b.png`;
+}
+
 /**
  * Generates and sends daily work reports to users and administrators.
  */
-async function generateDailyReports() {
+export async function generateDailyReports(env) {
     console.log('Generating daily work reports...');
+    const supabase = getSupabase(env);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -132,22 +136,15 @@ async function generateDailyReports() {
 
         if (adminError) throw adminError;
 
-        const adminEmail = (process.env.ADMIN_EMAIL || '').trim();
+        const adminEmail = (env.ADMIN_EMAIL || '').trim();
 
         if (!activeWorkOrders || activeWorkOrders.length === 0) {
             console.log('No work orders found with activity today. Sending "No Activity" report to admin...');
 
             if (adminEmail) {
-                const noActivityHtml = generateNoActivityHtml();
+                const noActivityHtml = generateNoActivityHtml(env, null, null);
                 const subject = `Daily Work Summary - No Activity - ${new Date().toLocaleDateString()}`;
-
-                const logoPath = path.join(__dirname, '../../public/assets/a360b.png');
-                const attachments = [];
-                if (fs.existsSync(logoPath)) {
-                    attachments.push({ filename: 'a360b.png', path: logoPath, cid: 'a360logo' });
-                }
-
-                await sendEmail(adminEmail, subject, noActivityHtml, attachments);
+                await sendEmail(env, adminEmail, subject, noActivityHtml);
                 return { success: true, message: 'No work orders found with activity. Admin notified.' };
             }
 
@@ -164,12 +161,6 @@ async function generateDailyReports() {
         allUsers.forEach(u => { userMap[u.id] = u; });
 
         const userReports = {};
-
-        const logoPath = path.join(__dirname, '../../public/assets/a360b.png');
-        const attachments = [];
-        if (fs.existsSync(logoPath)) {
-            attachments.push({ filename: 'a360b.png', path: logoPath, cid: 'a360logo' });
-        }
 
         activeWorkOrders.forEach(order => {
             const leadId = order.user_id;
@@ -203,17 +194,17 @@ async function generateDailyReports() {
 
         for (const userId in userReports) {
             const report = userReports[userId];
-            const html = generateUserHtml(report);
+            const html = generateUserHtml(env, report);
             const subject = `Daily Work Summary - ${report.name} - ${new Date().toLocaleDateString()}`;
 
             if (report.email && report.email.includes('@')) {
                 console.log(`Sending report to user: ${report.email}`);
-                await sendEmail(report.email, subject, html, attachments);
+                await sendEmail(env, report.email, subject, html);
             }
 
             if (adminEmail && adminEmail !== report.email) {
                 console.log(`Sending copy to admin: ${adminEmail}`);
-                await sendEmail(adminEmail, ` ${subject}`, html, attachments);
+                await sendEmail(env, adminEmail, ` ${subject}`, html);
             }
         }
 
@@ -229,9 +220,10 @@ async function generateDailyReports() {
  * Generates and sends a work report for a single user on a single date.
  * Sent ONLY to that user's own email — no admin copy, no other recipients.
  */
-async function generateReportForUser(userId, dateStr) {
+export async function generateReportForUser(env, userId, dateStr) {
     if (!userId) throw new Error('user_id is required');
     if (!dateStr) throw new Error('date is required');
+    const supabase = getSupabase(env);
 
     const dayStart = new Date(`${dateStr}T00:00:00`);
     if (isNaN(dayStart.getTime())) throw new Error('Invalid date');
@@ -272,24 +264,18 @@ async function generateReportForUser(userId, dateStr) {
         })
         .filter(order => order._dailyMs > 0);
 
-    const logoPath = path.join(__dirname, '../../public/assets/a360b.png');
-    const attachments = [];
-    if (fs.existsSync(logoPath)) {
-        attachments.push({ filename: 'a360b.png', path: logoPath, cid: 'a360logo' });
-    }
-
     const dateLabel = dayStart.toLocaleDateString();
     const subject = `Work Summary - ${user.name} - ${dateLabel}`;
 
     let html;
     if (relevantOrders.length === 0) {
-        html = generateNoActivityHtml(dayStart, user.name);
+        html = generateNoActivityHtml(env, dayStart, user.name);
     } else {
         const report = { name: user.name, email: user.username, orders: relevantOrders };
-        html = generateUserHtml(report, dayStart);
+        html = generateUserHtml(env, report, dayStart);
     }
 
-    await sendEmail(user.username, subject, html, attachments);
+    await sendEmail(env, user.username, subject, html);
 
     const totalMs = relevantOrders.reduce((sum, o) => sum + o._dailyMs, 0);
     return {
@@ -305,7 +291,9 @@ async function generateReportForUser(userId, dateStr) {
  * Sends a project progress report for a specific Job Order.
  * Recipients: customer emails + all workers on the JO + the person who triggered it.
  */
-async function sendProgressReport(jobOrderId, requesterId) {
+export async function sendProgressReport(env, jobOrderId, requesterId) {
+    const supabase = getSupabase(env);
+
     // 1. Fetch job order with work orders
     const { data: jobOrder, error: joError } = await supabase
         .from('job_orders')
@@ -361,18 +349,12 @@ async function sendProgressReport(jobOrderId, requesterId) {
     }
 
     // 5. Build the email
-    const logoPath = path.join(__dirname, '../../public/assets/a360b.png');
-    const attachments = [];
-    if (fs.existsSync(logoPath)) {
-        attachments.push({ filename: 'a360b.png', path: logoPath, cid: 'a360logo' });
-    }
-
     const allCompleted = (jobOrder.work_orders || []).length > 0 &&
         (jobOrder.work_orders || []).every(wo => wo.status === 'completed');
 
     const html = allCompleted
-        ? generateSignOffHtml(jobOrder, userMap)
-        : generateProgressReportHtml(jobOrder, userMap, false);
+        ? generateSignOffHtml(env, jobOrder, userMap)
+        : generateProgressReportHtml(env, jobOrder, userMap, false);
     const subject = allCompleted
         ? `Job Sign-Off: ${jobOrder.title} [${jobOrder.id}]`
         : `Project Progress Report: ${jobOrder.title} [${jobOrder.id}]`;
@@ -380,13 +362,13 @@ async function sendProgressReport(jobOrderId, requesterId) {
     // Send to all recipients in parallel
     await Promise.all(validRecipients.map(email => {
         console.log(`Sending progress report to: ${email}`);
-        return sendEmail(email, subject, html, attachments);
+        return sendEmail(env, email, subject, html);
     }));
 
     return { success: true, recipientCount: validRecipients.length, recipients: validRecipients };
 }
 
-function generateSignOffHtml(jobOrder, userMap) {
+function generateSignOffHtml(env, jobOrder, userMap) {
     const testedLabel = { not_tested: 'Not Tested', testing: 'Testing', pass: 'Pass', needs_fix: 'Needs Fix' };
     const testedColor = { not_tested: '#94a3b8', testing: '#f59e0b', pass: '#22c55e', needs_fix: '#ef4444' };
 
@@ -432,7 +414,7 @@ function generateSignOffHtml(jobOrder, userMap) {
                     <p style="margin:6px 0 0; color:#888; font-size:14px;">${dateStr}</p>
                 </td>
                 <td style="vertical-align:top; text-align:right;">
-                    <img src="cid:a360logo" alt="a360" style="height:42px; width:auto;">
+                    <img src="${logoUrl(env)}" alt="a360" style="height:42px; width:auto;">
                 </td>
             </tr>
         </table>
@@ -483,7 +465,7 @@ function generateSignOffHtml(jobOrder, userMap) {
     </div>`;
 }
 
-function generateProgressReportHtml(jobOrder, userMap, allCompleted) {
+function generateProgressReportHtml(env, jobOrder, userMap, allCompleted) {
     const testedLabel = { not_tested: 'Not Tested', testing: 'Testing', pass: 'Pass', needs_fix: 'Needs Fix' };
     const testedColor = { not_tested: '#94a3b8', testing: '#f59e0b', pass: '#22c55e', needs_fix: '#ef4444' };
 
@@ -532,7 +514,7 @@ function generateProgressReportHtml(jobOrder, userMap, allCompleted) {
                     <p style="margin: 6px 0 0; color: #666; font-size: 15px;">${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                 </td>
                 <td style="vertical-align: top; text-align: right;">
-                    <img src="cid:a360logo" alt="a360" style="height: 45px; width: auto;">
+                    <img src="${logoUrl(env)}" alt="a360" style="height: 45px; width: auto;">
                 </td>
             </tr>
         </table>
@@ -579,7 +561,7 @@ function generateProgressReportHtml(jobOrder, userMap, allCompleted) {
     </div>`;
 }
 
-function generateUserHtml(report, forDate) {
+function generateUserHtml(env, report, forDate) {
     const dateObj = forDate || new Date();
     const totalMs = report.orders.reduce((sum, o) => sum + o._dailyMs, 0);
     const rows = report.orders.map(o => `
@@ -611,7 +593,7 @@ function generateUserHtml(report, forDate) {
                         <p style="margin: 4px 0 0; color: #111; font-weight: bold; font-size: 15px;">${dateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                     </td>
                     <td style="vertical-align: top; text-align: right;">
-                        <img src="cid:a360logo" alt="a360" style="height: 45px; width: auto;">
+                        <img src="${logoUrl(env)}" alt="a360" style="height: 45px; width: auto;">
                     </td>
                 </tr>
             </table>
@@ -644,7 +626,7 @@ function generateUserHtml(report, forDate) {
     `;
 }
 
-function generateNoActivityHtml(forDate, forName) {
+function generateNoActivityHtml(env, forDate, forName) {
     const dateObj = forDate || new Date();
     return `
         <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #eef0f2; border-radius: 12px; padding: 30px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
@@ -656,7 +638,7 @@ function generateNoActivityHtml(forDate, forName) {
                         <p style="margin: 4px 0 0; color: #111; font-weight: bold; font-size: 15px;">${dateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                     </td>
                     <td style="vertical-align: top; text-align: right;">
-                        <img src="cid:a360logo" alt="a360" style="height: 45px; width: auto;">
+                        <img src="${logoUrl(env)}" alt="a360" style="height: 45px; width: auto;">
                     </td>
                 </tr>
             </table>
@@ -672,12 +654,3 @@ function generateNoActivityHtml(forDate, forName) {
         </div>
     `;
 }
-
-module.exports = {
-    generateDailyReports,
-    generateReportForUser,
-    sendProgressReport,
-    calculateDuration,
-    calculateDailyDuration,
-    formatDuration
-};

@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "job-order",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "triggers": {
+    // Same time the old node-cron/Vercel cron ran at (15:15 UTC daily).
+    // Cron Triggers always run in UTC.
+    "crons": ["15 15 * * *"]
+  },
+  "observability": {
+    "enabled": true
+  }
+}

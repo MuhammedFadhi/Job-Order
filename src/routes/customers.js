@@ -1,9 +1,11 @@
-const express = require('express');
-const router = express.Router();
-const supabase = require('../supabaseClient');
+import { Hono } from 'hono';
+import { getSupabase } from '../supabaseClient.js';
+
+const customers = new Hono();
 
 // GET all customers
-router.get('/', async (req, res) => {
+customers.get('/', async (c) => {
+    const supabase = getSupabase(c.env);
     try {
         const { data, error } = await supabase
             .from('customers')
@@ -11,16 +13,17 @@ router.get('/', async (req, res) => {
             .order('name', { ascending: true });
 
         if (error) throw error;
-        res.json(data);
+        return c.json(data);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return c.json({ error: err.message }, 500);
     }
 });
 
 // POST new customer
-router.post('/', async (req, res) => {
-    const { name, emails } = req.body;
-    if (!name) return res.status(400).json({ error: 'Customer name is required' });
+customers.post('/', async (c) => {
+    const supabase = getSupabase(c.env);
+    const { name, emails } = await c.req.json();
+    if (!name) return c.json({ error: 'Customer name is required' }, 400);
 
     const emailList = Array.isArray(emails) ? emails.filter(e => e && e.trim()) : [];
 
@@ -31,16 +34,17 @@ router.post('/', async (req, res) => {
             .select();
 
         if (error) throw error;
-        res.status(201).json(data[0]);
+        return c.json(data[0], 201);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return c.json({ error: err.message }, 500);
     }
 });
 
 // PUT update customer
-router.put('/:id', async (req, res) => {
-    const { name, emails } = req.body;
-    const { id } = req.params;
+customers.put('/:id', async (c) => {
+    const supabase = getSupabase(c.env);
+    const { name, emails } = await c.req.json();
+    const id = c.req.param('id');
 
     const updateData = {};
     if (name !== undefined) updateData.name = name;
@@ -56,16 +60,17 @@ router.put('/:id', async (req, res) => {
             .select();
 
         if (error) throw error;
-        if (!data.length) return res.status(404).json({ error: 'Customer not found' });
-        res.json(data[0]);
+        if (!data.length) return c.json({ error: 'Customer not found' }, 404);
+        return c.json(data[0]);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return c.json({ error: err.message }, 500);
     }
 });
 
 // DELETE customer
-router.delete('/:id', async (req, res) => {
-    const { id } = req.params;
+customers.delete('/:id', async (c) => {
+    const supabase = getSupabase(c.env);
+    const id = c.req.param('id');
 
     try {
         const { error } = await supabase
@@ -74,10 +79,10 @@ router.delete('/:id', async (req, res) => {
             .eq('id', id);
 
         if (error) throw error;
-        res.json({ message: 'Customer deleted successfully' });
+        return c.json({ message: 'Customer deleted successfully' });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return c.json({ error: err.message }, 500);
     }
 });
 
-module.exports = router;
+export default customers;

@@ -1,14 +1,16 @@
-const express = require('express');
-const router = express.Router();
-const supabase = require('../supabaseClient');
-const bcrypt = require('bcryptjs');
+import { Hono } from 'hono';
+import bcrypt from 'bcryptjs';
+import { getSupabase } from '../supabaseClient.js';
+
+const auth = new Hono();
 
 // POST /api/auth/register
-router.post('/register', async (req, req_res) => { // Use res as req_res inside to bypass variable shadowing
-    const { name, username, password } = req.body;
+auth.post('/register', async (c) => {
+    const supabase = getSupabase(c.env);
+    const { name, username, password } = await c.req.json();
 
     if (!name || !username || !password) {
-        return req_res.status(400).json({ error: 'Name, username, and password are required' });
+        return c.json({ error: 'Name, username, and password are required' }, 400);
     }
 
     try {
@@ -20,7 +22,7 @@ router.post('/register', async (req, req_res) => { // Use res as req_res inside 
             .single();
 
         if (existingUser) {
-            return req_res.status(400).json({ error: 'Username is already taken' });
+            return c.json({ error: 'Username is already taken' }, 400);
         }
 
         // Hash password
@@ -34,9 +36,9 @@ router.post('/register', async (req, req_res) => { // Use res as req_res inside 
         // Insert new user
         const { data: newUser, error } = await supabase
             .from('users')
-            .insert([{ 
-                name, 
-                username, 
+            .insert([{
+                name,
+                username,
                 password: hashedPassword,
                 role: 'User', // default role
                 color_code: randomColor
@@ -45,24 +47,23 @@ router.post('/register', async (req, req_res) => { // Use res as req_res inside 
 
         if (error) {
             console.error('Registration Error:', error);
-            return req_res.status(500).json({ error: error.message || 'Database error' });
+            return c.json({ error: error.message || 'Database error' }, 500);
         }
 
-        req_res.status(201).json({
-            message: 'Registration successful'
-        });
+        return c.json({ message: 'Registration successful' }, 201);
     } catch (err) {
         console.error(err);
-        req_res.status(500).json({ error: 'Server error during registration' });
+        return c.json({ error: 'Server error during registration' }, 500);
     }
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
-    const { username, password } = req.body;
+auth.post('/login', async (c) => {
+    const supabase = getSupabase(c.env);
+    const { username, password } = await c.req.json();
 
     if (!username || !password) {
-        return res.status(400).json({ error: 'Username and password are required' });
+        return c.json({ error: 'Username and password are required' }, 400);
     }
 
     try {
@@ -74,7 +75,7 @@ router.post('/login', async (req, res) => {
             .single();
 
         if (error || !user) {
-            return res.status(401).json({ error: 'Invalid username or password' });
+            return c.json({ error: 'Invalid username or password' }, 401);
         }
 
         // Verify Password
@@ -85,22 +86,22 @@ router.post('/login', async (req, res) => {
         } else if (user.password) {
             isMatch = await bcrypt.compare(password, user.password);
         }
-        
+
         if (!isMatch) {
-            return res.status(401).json({ error: 'Invalid username or password' });
+            return c.json({ error: 'Invalid username or password' }, 401);
         }
 
         // Remove password from the response object
         const { password: _, ...userProfile } = user;
 
-        res.json({
+        return c.json({
             message: 'Login successful',
             user: userProfile
         });
     } catch (err) {
         console.error('Login Server Error:', err);
-        res.status(500).json({ error: err.message || 'Server error during login' });
+        return c.json({ error: err.message || 'Server error during login' }, 500);
     }
 });
 
-module.exports = router;
+export default auth;

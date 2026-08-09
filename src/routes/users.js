@@ -1,16 +1,18 @@
-const express = require('express');
-const router = express.Router();
-const supabase = require('../supabaseClient');
+import { Hono } from 'hono';
+import { getSupabase } from '../supabaseClient.js';
+
+const users = new Hono();
 
 // GET all users (only properly registered users with a username, no duplicates)
-router.get('/', async (req, res) => {
+users.get('/', async (c) => {
+    const supabase = getSupabase(c.env);
     const { data, error } = await supabase
         .from('users')
         .select('*')
         .not('username', 'is', null)
         .order('created_at', { ascending: true }); // oldest first so we keep the original
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return c.json({ error: error.message }, 500);
 
     // Deduplicate by username - keep the first (oldest) entry
     const seen = new Set();
@@ -20,28 +22,30 @@ router.get('/', async (req, res) => {
         return true;
     });
 
-    res.json(unique);
+    return c.json(unique);
 });
 
 // GET single user
-router.get('/:id', async (req, res) => {
+users.get('/:id', async (c) => {
+    const supabase = getSupabase(c.env);
     const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('id', req.params.id)
+        .eq('id', c.req.param('id'))
         .single();
 
-    if (error) return res.status(500).json({ error: error.message });
-    if (!data) return res.status(404).json({ error: 'User not found' });
-    res.json(data);
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data) return c.json({ error: 'User not found' }, 404);
+    return c.json(data);
 });
 
 // POST new user
-router.post('/', async (req, res) => {
-    const { name, role } = req.body;
+users.post('/', async (c) => {
+    const supabase = getSupabase(c.env);
+    const { name, role } = await c.req.json();
 
     if (!name) {
-        return res.status(400).json({ error: 'Name is required' });
+        return c.json({ error: 'Name is required' }, 400);
     }
 
     const { data, error } = await supabase
@@ -49,34 +53,35 @@ router.post('/', async (req, res) => {
         .insert([{ name, role: role || 'User' }])
         .select();
 
-    if (error) return res.status(500).json({ error: error.message });
-    res.status(201).json(data[0]);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json(data[0], 201);
 });
 
 // PUT update user (color_code and/or name)
-router.put('/:id', async (req, res) => {
-    const { color_code, name } = req.body;
+users.put('/:id', async (c) => {
+    const supabase = getSupabase(c.env);
+    const { color_code, name } = await c.req.json();
 
     const updateFields = {};
     if (color_code !== undefined) updateFields.color_code = color_code;
     if (name !== undefined) {
-        if (!name.trim()) return res.status(400).json({ error: 'Name cannot be empty' });
+        if (!name.trim()) return c.json({ error: 'Name cannot be empty' }, 400);
         updateFields.name = name.trim();
     }
 
     if (Object.keys(updateFields).length === 0) {
-        return res.status(400).json({ error: 'No valid fields to update' });
+        return c.json({ error: 'No valid fields to update' }, 400);
     }
 
     const { data, error } = await supabase
         .from('users')
         .update(updateFields)
-        .eq('id', req.params.id)
+        .eq('id', c.req.param('id'))
         .select();
 
-    if (error) return res.status(500).json({ error: error.message });
-    if (!data.length) return res.status(404).json({ error: 'User not found' });
-    res.json(data[0]);
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data.length) return c.json({ error: 'User not found' }, 404);
+    return c.json(data[0]);
 });
 
-module.exports = router;
+export default users;

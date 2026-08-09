@@ -1,10 +1,11 @@
-const express = require('express');
-const router = express.Router();
-const supabase = require('../supabaseClient');
-const { sendProgressReport } = require('../utils/reportService');
+import { Hono } from 'hono';
+import { getSupabase } from '../supabaseClient.js';
+import { sendProgressReport } from '../utils/reportService.js';
+
+const jobOrders = new Hono();
 
 // Helper to generate JB-XXXX ID
-async function generateJobOrderID() {
+async function generateJobOrderID(supabase) {
     const { data, error } = await supabase
         .from('job_orders')
         .select('id')
@@ -26,12 +27,12 @@ async function generateJobOrderID() {
 }
 
 // Helper: attach user objects to work_orders by user_id
-async function attachUsersToWorkOrders(jobOrders) {
+async function attachUsersToWorkOrders(supabase, jobOrdersData) {
     const { data: users } = await supabase.from('users').select('id, name, username, color_code');
     const userMap = {};
     if (users) users.forEach(u => { userMap[u.id] = u; });
 
-    const list = Array.isArray(jobOrders) ? jobOrders : [jobOrders];
+    const list = Array.isArray(jobOrdersData) ? jobOrdersData : [jobOrdersData];
     list.forEach(job => {
         if (job.work_orders) {
             job.work_orders = job.work_orders.map(wo => ({
@@ -40,45 +41,48 @@ async function attachUsersToWorkOrders(jobOrders) {
             }));
         }
     });
-    return Array.isArray(jobOrders) ? list : list[0];
+    return Array.isArray(jobOrdersData) ? list : list[0];
 }
 
 // GET all job orders
-router.get('/', async (req, res) => {
+jobOrders.get('/', async (c) => {
+    const supabase = getSupabase(c.env);
     const { data, error } = await supabase
         .from('job_orders')
         .select('*, assigned_by_user:users!job_orders_assigned_by_fkey(name), work_orders(*)')
         .order('created_at', { ascending: false });
 
-    if (error) return res.status(500).json({ error: error.message });
-    const result = await attachUsersToWorkOrders(data);
-    res.json(result);
+    if (error) return c.json({ error: error.message }, 500);
+    const result = await attachUsersToWorkOrders(supabase, data);
+    return c.json(result);
 });
 
 // GET single job order
-router.get('/:id', async (req, res) => {
+jobOrders.get('/:id', async (c) => {
+    const supabase = getSupabase(c.env);
     const { data, error } = await supabase
         .from('job_orders')
         .select('*, assigned_by_user:users!job_orders_assigned_by_fkey(name), work_orders(*)')
-        .eq('id', req.params.id)
+        .eq('id', c.req.param('id'))
         .single();
 
-    if (error) return res.status(500).json({ error: error.message });
-    if (!data) return res.status(404).json({ error: 'Job order not found' });
-    const result = await attachUsersToWorkOrders(data);
-    res.json(result);
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data) return c.json({ error: 'Job order not found' }, 404);
+    const result = await attachUsersToWorkOrders(supabase, data);
+    return c.json(result);
 });
 
 // POST new job order
-router.post('/', async (req, res) => {
-    const { title, description, customer_name, status, assigned_by, assigned_to_ids, priority } = req.body;
+jobOrders.post('/', async (c) => {
+    const supabase = getSupabase(c.env);
+    const { title, description, customer_name, status, assigned_by, assigned_to_ids, priority } = await c.req.json();
 
     if (!title) {
-        return res.status(400).json({ error: 'Title is required' });
+        return c.json({ error: 'Title is required' }, 400);
     }
 
     try {
-        const id = await generateJobOrderID();
+        const id = await generateJobOrderID(supabase);
 
         const { data, error } = await supabase
             .from('job_orders')
@@ -94,29 +98,30 @@ router.post('/', async (req, res) => {
             }])
             .select();
 
-        if (error) return res.status(500).json({ error: error.message });
-        res.status(201).json(data[0]);
+        if (error) return c.json({ error: error.message }, 500);
+        return c.json(data[0], 201);
     } catch (err) {
-        res.status(500).json({ error: 'Failed to generate ID or create job order' });
+        return c.json({ error: 'Failed to generate ID or create job order' }, 500);
     }
 });
 
 // POST send progress report email for a job order
-router.post('/:id/send-report', async (req, res) => {
-    const { requester_id } = req.body;
+jobOrders.post('/:id/send-report', async (c) => {
+    const { requester_id } = await c.req.json();
 
     try {
-        const result = await sendProgressReport(req.params.id, requester_id);
-        res.json(result);
+        const result = await sendProgressReport(c.env, c.req.param('id'), requester_id);
+        return c.json(result);
     } catch (err) {
         console.error('Failed to send progress report:', err);
-        res.status(500).json({ error: err.message || 'Failed to send report' });
+        return c.json({ error: err.message || 'Failed to send report' }, 500);
     }
 });
 
 // POST mark job complete — bulk-completes all work orders + closes job
-router.post('/:id/complete', async (req, res) => {
-    const jobId = req.params.id;
+jobOrders.post('/:id/complete', async (c) => {
+    const supabase = getSupabase(c.env);
+    const jobId = c.req.param('id');
 
     try {
         // 1. Mark all work orders for this job as completed + tested: pass
@@ -132,7 +137,7 @@ router.post('/:id/complete', async (req, res) => {
             .eq('ref_id_jo', jobId)
             .neq('status', 'completed'); // skip already-completed ones
 
-        if (woError) return res.status(500).json({ error: woError.message });
+        if (woError) return c.json({ error: woError.message }, 500);
 
         // 2. Close the job order
         const { data, error: joError } = await supabase
@@ -141,18 +146,19 @@ router.post('/:id/complete', async (req, res) => {
             .eq('id', jobId)
             .select();
 
-        if (joError) return res.status(500).json({ error: joError.message });
-        if (!data.length) return res.status(404).json({ error: 'Job order not found' });
+        if (joError) return c.json({ error: joError.message }, 500);
+        if (!data.length) return c.json({ error: 'Job order not found' }, 404);
 
-        res.json({ success: true, job: data[0] });
+        return c.json({ success: true, job: data[0] });
     } catch (err) {
-        res.status(500).json({ error: err.message || 'Failed to complete job' });
+        return c.json({ error: err.message || 'Failed to complete job' }, 500);
     }
 });
 
 // PUT update job order
-router.put('/:id', async (req, res) => {
-    const { title, description, customer_name, status, assigned_by, assigned_to_ids, priority } = req.body;
+jobOrders.put('/:id', async (c) => {
+    const supabase = getSupabase(c.env);
+    const { title, description, customer_name, status, assigned_by, assigned_to_ids, priority } = await c.req.json();
 
     const { data, error } = await supabase
         .from('job_orders')
@@ -166,37 +172,40 @@ router.put('/:id', async (req, res) => {
             priority,
             updated_at: new Date()
         })
-        .eq('id', req.params.id)
+        .eq('id', c.req.param('id'))
         .select();
 
-    if (error) return res.status(500).json({ error: error.message });
-    if (!data.length) return res.status(404).json({ error: 'Job order not found' });
-    res.json(data[0]);
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data.length) return c.json({ error: 'Job order not found' }, 404);
+    return c.json(data[0]);
 });
 
 // DELETE job order and its associated work orders
-router.delete('/:id', async (req, res) => {
+jobOrders.delete('/:id', async (c) => {
+    const supabase = getSupabase(c.env);
+    const id = c.req.param('id');
+
     const { error: woError } = await supabase
         .from('work_orders')
         .delete()
-        .eq('ref_id_jo', req.params.id);
+        .eq('ref_id_jo', id);
 
     if (woError) {
         console.error('Work Order deletion error:', woError.message);
-        return res.status(500).json({ error: 'Failed to delete associated work orders' });
+        return c.json({ error: 'Failed to delete associated work orders' }, 500);
     }
 
     const { error: joError } = await supabase
         .from('job_orders')
         .delete()
-        .eq('id', req.params.id);
+        .eq('id', id);
 
     if (joError) {
         console.error('Job Order deletion error:', joError.message);
-        return res.status(500).json({ error: 'Failed to delete job order' });
+        return c.json({ error: 'Failed to delete job order' }, 500);
     }
 
-    res.json({ message: 'Job order and associated work orders deleted successfully' });
+    return c.json({ message: 'Job order and associated work orders deleted successfully' });
 });
 
-module.exports = router;
+export default jobOrders;

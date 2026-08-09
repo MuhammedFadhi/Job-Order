@@ -1,9 +1,10 @@
-const express = require('express');
-const router = express.Router();
-const supabase = require('../supabaseClient');
+import { Hono } from 'hono';
+import { getSupabase } from '../supabaseClient.js';
+
+const workOrders = new Hono();
 
 // Helper to generate WIP-XXXX ID
-async function generateWorkOrderID() {
+async function generateWorkOrderID(supabase) {
     const { data, error } = await supabase
         .from('work_orders')
         .select('id')
@@ -25,7 +26,8 @@ async function generateWorkOrderID() {
 }
 
 // GET all work orders with joined data
-router.get('/', async (req, res) => {
+workOrders.get('/', async (c) => {
+    const supabase = getSupabase(c.env);
     const { data, error } = await supabase
         .from('work_orders')
         .select(`
@@ -35,33 +37,35 @@ router.get('/', async (req, res) => {
         `)
         .order('created_at', { ascending: false });
 
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json(data);
 });
 
 // GET single work order
-router.get('/:id', async (req, res) => {
+workOrders.get('/:id', async (c) => {
+    const supabase = getSupabase(c.env);
     const { data, error } = await supabase
         .from('work_orders')
         .select('*')
-        .eq('id', req.params.id)
+        .eq('id', c.req.param('id'))
         .single();
 
-    if (error) return res.status(500).json({ error: error.message });
-    if (!data) return res.status(404).json({ error: 'Work order not found' });
-    res.json(data);
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data) return c.json({ error: 'Work order not found' }, 404);
+    return c.json(data);
 });
 
 // POST new work order (admin creates as pending, or user creates and starts immediately)
-router.post('/', async (req, res) => {
-    const { description, user_id, ref_id_jo, tagged_user_ids, estimate_time } = req.body;
+workOrders.post('/', async (c) => {
+    const supabase = getSupabase(c.env);
+    const { description, user_id, ref_id_jo, tagged_user_ids, estimate_time } = await c.req.json();
 
     if (!ref_id_jo) {
-        return res.status(400).json({ error: 'Job Order Reference ID is required' });
+        return c.json({ error: 'Job Order Reference ID is required' }, 400);
     }
 
     try {
-        const id = await generateWorkOrderID();
+        const id = await generateWorkOrderID(supabase);
 
         // If user_id provided, start immediately; otherwise create as pending
         const isPending = !user_id;
@@ -80,19 +84,21 @@ router.post('/', async (req, res) => {
             }])
             .select();
 
-        if (error) return res.status(500).json({ error: error.message });
-        res.status(201).json(data[0]);
+        if (error) return c.json({ error: error.message }, 500);
+        return c.json(data[0], 201);
     } catch (err) {
-        res.status(500).json({ error: 'Failed to generate ID or create work order' });
+        return c.json({ error: 'Failed to generate ID or create work order' }, 500);
     }
 });
 
 // PUT /:id/start — user claims and starts a pending work order
-router.put('/:id/start', async (req, res) => {
-    const { user_id } = req.body;
+workOrders.put('/:id/start', async (c) => {
+    const supabase = getSupabase(c.env);
+    const { user_id } = await c.req.json();
+    const id = c.req.param('id');
 
     if (!user_id) {
-        return res.status(400).json({ error: 'user_id is required to start a work order' });
+        return c.json({ error: 'user_id is required to start a work order' }, 400);
     }
 
     try {
@@ -100,12 +106,12 @@ router.put('/:id/start', async (req, res) => {
         const { data: existing, error: fetchErr } = await supabase
             .from('work_orders')
             .select('status, user_id')
-            .eq('id', req.params.id)
+            .eq('id', id)
             .single();
 
-        if (fetchErr || !existing) return res.status(404).json({ error: 'Work order not found' });
+        if (fetchErr || !existing) return c.json({ error: 'Work order not found' }, 404);
         if (existing.status !== 'pending') {
-            return res.status(400).json({ error: 'Work order is not in pending state' });
+            return c.json({ error: 'Work order is not in pending state' }, 400);
         }
 
         const { data, error } = await supabase
@@ -116,19 +122,20 @@ router.put('/:id/start', async (req, res) => {
                 time_in: new Date(),
                 updated_at: new Date()
             })
-            .eq('id', req.params.id)
+            .eq('id', id)
             .select();
 
-        if (error) return res.status(500).json({ error: error.message });
-        res.json(data[0]);
+        if (error) return c.json({ error: error.message }, 500);
+        return c.json(data[0]);
     } catch (err) {
-        res.status(500).json({ error: 'Failed to start work order' });
+        return c.json({ error: 'Failed to start work order' }, 500);
     }
 });
 
 // PUT update work order
-router.put('/:id', async (req, res) => {
-    const { status, description, time_in, time_out, pause_history, estimate_time, tested, user_id } = req.body;
+workOrders.put('/:id', async (c) => {
+    const supabase = getSupabase(c.env);
+    const { status, description, time_in, time_out, pause_history, estimate_time, tested, user_id } = await c.req.json();
 
     let updatedTimeOut = time_out;
     if (status === 'completed' && !time_out) {
@@ -151,23 +158,24 @@ router.put('/:id', async (req, res) => {
     const { data, error } = await supabase
         .from('work_orders')
         .update(updateFields)
-        .eq('id', req.params.id)
+        .eq('id', c.req.param('id'))
         .select();
 
-    if (error) return res.status(500).json({ error: error.message });
-    if (!data.length) return res.status(404).json({ error: 'Work order not found' });
-    res.json(data[0]);
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data.length) return c.json({ error: 'Work order not found' }, 404);
+    return c.json(data[0]);
 });
 
 // DELETE work order
-router.delete('/:id', async (req, res) => {
+workOrders.delete('/:id', async (c) => {
+    const supabase = getSupabase(c.env);
     const { error } = await supabase
         .from('work_orders')
         .delete()
-        .eq('id', req.params.id);
+        .eq('id', c.req.param('id'));
 
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ message: 'Work order deleted successfully' });
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ message: 'Work order deleted successfully' });
 });
 
-module.exports = router;
+export default workOrders;
