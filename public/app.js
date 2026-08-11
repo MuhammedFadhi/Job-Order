@@ -2208,21 +2208,33 @@ function buildTimelineHTML(woId, timeIn, timeOut, serverHistory) {
 
     let html = '';
     
-    // Helper to generate admin edit button
-    const getEditBtn = (type, index, timestamp) => {
-        if (!isAdmin) return '';
-        return `<button class="btn-timeline-edit" onclick="openEditTimeModal('${woId}', '${type}', ${index}, ${timestamp})" title="Edit Time">
-            <i class="fa-solid fa-pencil"></i>
-        </button>`;
+    const renderEventHTML = (eventClass, dotClass, label, type, index, timestamp) => {
+        const d = new Date(timestamp);
+        const dateStr = d.toISOString().split('T')[0];
+        const timeStr = d.toTimeString().split(' ')[0]; // HH:MM:SS
+        const formattedDisplay = fmtTime(timestamp);
+        const editKey = `${woId}-${type}-${index}`;
+
+        return `<div class="pipeline-event ${eventClass}">
+            <span class="pipeline-dot ${dotClass}"></span>
+            <span class="pipeline-label">${label}</span>
+            <div class="pipeline-time-wrap" id="pe-display-${editKey}">
+                <span class="pipeline-time">${formattedDisplay}</span>
+                ${isAdmin ? `<button type="button" class="btn-timeline-edit" onclick="toggleInlineTimeEdit('${woId}', '${type}', ${index})" title="Edit Time"><i class="fa-solid fa-pencil"></i></button>` : ''}
+            </div>
+            ${isAdmin ? `<div class="pipeline-time-edit-form hidden" id="pe-edit-${editKey}" style="display:none;">
+                <input type="date" id="pe-date-${editKey}" class="pe-inline-input" value="${dateStr}">
+                <input type="time" step="1" id="pe-time-${editKey}" class="pe-inline-input" value="${timeStr}">
+                <button type="button" class="btn btn-sm btn-primary" onclick="saveInlineTimeEdit('${woId}', '${type}', ${index})" title="Save" style="padding:2px 6px; font-size:0.75rem;"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn btn-sm btn-outline" onclick="cancelInlineTimeEdit('${woId}', '${type}', ${index})" title="Cancel" style="padding:2px 5px; font-size:0.75rem;"><i class="fa-solid fa-xmark"></i></button>
+            </div>` : ''}
+        </div>`;
     };
     
     // Start event
-    html += `<div class="pipeline-event pipeline-start">
-        <span class="pipeline-dot dot-start"></span>
-        <span class="pipeline-label">Started</span>
-        <span class="pipeline-time">${fmtTime(new Date(timeIn).getTime())}</span>
-        ${getEditBtn('start', -1, new Date(timeIn).getTime())}
-    </div>`;
+    if (timeIn) {
+        html += renderEventHTML('pipeline-start', 'dot-start', 'Started', 'start', -1, new Date(timeIn).getTime());
+    }
     
     history.forEach((entry, idx) => {
         let label = '';
@@ -2243,25 +2255,13 @@ function buildTimelineHTML(woId, timeIn, timeOut, serverHistory) {
             eventClass = 'pipeline-end';
         }
         
-        html += `<div class="pipeline-event ${eventClass}">
-            <span class="pipeline-dot ${dotClass}"></span>
-            <span class="pipeline-label">${label}</span>
-            <span class="pipeline-time">${fmtTime(entry.at)}</span>
-            ${getEditBtn('history', idx, entry.at)}
-        </div>`;
+        html += renderEventHTML(eventClass, dotClass, label, 'history', idx, entry.at);
     });
 
-    // Fallback Finished event: some work orders were completed without an
-    // 'end' history entry (e.g. bulk job completion before that was tracked).
-    // Synthesize one from time_out so the timeline still shows it.
+    // Fallback Finished event
     const hasEndEvent = history.some(entry => entry.type === 'end');
     if (!hasEndEvent && timeOut) {
-        html += `<div class="pipeline-event pipeline-end">
-            <span class="pipeline-dot dot-end"></span>
-            <span class="pipeline-label">Finished</span>
-            <span class="pipeline-time">${fmtTime(new Date(timeOut).getTime())}</span>
-            ${getEditBtn('end', -1, new Date(timeOut).getTime())}
-        </div>`;
+        html += renderEventHTML('pipeline-end', 'dot-end', 'Finished', 'end', -1, new Date(timeOut).getTime());
     }
 
     return `
@@ -2345,7 +2345,17 @@ function buildWorkOrderDetailHTML(wo) {
             <div class="work-item-body" style="padding:0;">
                 <div class="work-item-top">
                     <div class="work-info">
-                        <span class="work-desc">${wo.description || 'No description'}</span>
+                        <div class="work-desc-wrap" id="wo-desc-wrap-${wo.id}">
+                            <span class="work-desc wo-desc-text-${wo.id}" id="wo-desc-text-${wo.id}">${wo.description || 'No description'}</span>
+                            <button type="button" class="wo-inline-edit-btn" onclick="toggleInlineWOEdit('${wo.id}')" title="Edit Description">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                        </div>
+                        <div class="work-desc-edit-form hidden" id="wo-desc-edit-form-${wo.id}" style="display:none;">
+                            <input type="text" id="wo-desc-input-${wo.id}" class="wo-inline-edit-input" value="${safeDesc}" onkeydown="if(event.key==='Enter') saveInlineWOEdit('${wo.id}'); else if(event.key==='Escape') cancelInlineWOEdit('${wo.id}');">
+                            <button type="button" class="btn btn-sm btn-primary" onclick="saveInlineWOEdit('${wo.id}')" title="Save" style="padding: 0.25rem 0.6rem;"><i class="fa-solid fa-check"></i></button>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="cancelInlineWOEdit('${wo.id}')" title="Cancel" style="padding: 0.25rem 0.5rem;"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
                         <div class="work-meta">
                             <span>${wo.id}</span>
                             <button onclick="copyWorkOrderDetails('${wo.id}')" title="Copy ID" style="background:none;border:none;cursor:pointer;padding:0 2px;color:#6366f1;font-size:0.75rem;vertical-align:middle;opacity:0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'"><i class="fa-regular fa-copy"></i></button>
@@ -2578,7 +2588,17 @@ function renderWorkOrders(workOrders) {
             <div class="work-item-body">
                 <div class="work-item-top">
                     <div class="work-info">
-                        <span class="work-desc">${wo.description || 'No description'}</span>
+                        <div class="work-desc-wrap" id="wo-desc-wrap-${wo.id}">
+                            <span class="work-desc wo-desc-text-${wo.id}" id="wo-desc-text-${wo.id}">${wo.description || 'No description'}</span>
+                            <button type="button" class="wo-inline-edit-btn" onclick="toggleInlineWOEdit('${wo.id}')" title="Edit Description">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                        </div>
+                        <div class="work-desc-edit-form hidden" id="wo-desc-edit-form-${wo.id}" style="display:none;">
+                            <input type="text" id="wo-desc-input-${wo.id}" class="wo-inline-edit-input" value="${safeDesc}" onkeydown="if(event.key==='Enter') saveInlineWOEdit('${wo.id}'); else if(event.key==='Escape') cancelInlineWOEdit('${wo.id}');">
+                            <button type="button" class="btn btn-sm btn-primary" onclick="saveInlineWOEdit('${wo.id}')" title="Save" style="padding: 0.25rem 0.6rem;"><i class="fa-solid fa-check"></i></button>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="cancelInlineWOEdit('${wo.id}')" title="Cancel" style="padding: 0.25rem 0.5rem;"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
                         <div class="work-meta">
                             <span>${wo.id}</span>
                             <button onclick="copyWorkOrderDetails('${wo.id}')" title="Copy ID" style="background:none;border:none;cursor:pointer;padding:0 2px;color:#6366f1;font-size:0.75rem;vertical-align:middle;opacity:0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'"><i class="fa-regular fa-copy"></i></button>
@@ -2841,7 +2861,82 @@ function populateTaggingList() {
     });
 }
 
+window.toggleInlineWOEdit = function(woId) {
+    const wrap = document.getElementById(`wo-desc-wrap-${woId}`);
+    const form = document.getElementById(`wo-desc-edit-form-${woId}`);
+    const input = document.getElementById(`wo-desc-input-${woId}`);
+    if (wrap && form) {
+        wrap.style.display = 'none';
+        form.style.display = 'flex';
+        form.classList.remove('hidden');
+        if (input) {
+            input.focus();
+            input.select();
+        }
+    }
+};
+
+window.cancelInlineWOEdit = function(woId) {
+    const wrap = document.getElementById(`wo-desc-wrap-${woId}`);
+    const form = document.getElementById(`wo-desc-edit-form-${woId}`);
+    if (wrap && form) {
+        form.style.display = 'none';
+        form.classList.add('hidden');
+        wrap.style.display = 'flex';
+    }
+};
+
+window.saveInlineWOEdit = async function(woId) {
+    const input = document.getElementById(`wo-desc-input-${woId}`);
+    if (!input) return;
+    const newDesc = input.value.trim();
+    if (!newDesc) {
+        showToast('Description cannot be empty.', 'error');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/work-orders/${woId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description: newDesc })
+        });
+
+        if (res.ok) {
+            showToast('Work order updated.', 'success');
+            // Update all matching display text elements in DOM
+            const descTextEls = document.querySelectorAll(`.wo-desc-text-${woId}`);
+            descTextEls.forEach(el => el.textContent = newDesc);
+            
+            // Toggle form back to display mode
+            cancelInlineWOEdit(woId);
+
+            // Update in cache
+            if (window._lastRenderedWorkOrders) {
+                const item = window._lastRenderedWorkOrders.find(w => w.id === woId);
+                if (item) item.description = newDesc;
+            }
+
+            // Refresh views quietly
+            if (currentJobOrder) openJobDetail(currentJobOrder.id);
+            const activeMyWork = document.getElementById('my-work-view') && !document.getElementById('my-work-view').classList.contains('hidden-view');
+            if (activeMyWork) loadMyWorkDashboard(document.querySelector('#mywork-tabs .tab-btn.active')?.dataset.tab || 'all');
+            else loadDashboard();
+        } else {
+            throw new Error('Failed to update');
+        }
+    } catch {
+        showToast('Failed to update work order.', 'error');
+    }
+};
+
 window.openEditWorkModal = function(woId, description) {
+    // If inline edit form exists, prefer inline edit
+    const form = document.getElementById(`wo-desc-edit-form-${woId}`);
+    if (form) {
+        toggleInlineWOEdit(woId);
+        return;
+    }
     document.getElementById('ew-id').value = woId;
     document.getElementById('ew-desc').value = description;
     openModal(modals.editWork);
@@ -3087,7 +3182,98 @@ window.handleToggleAllJobWorkOrders = async function() {
     }
 };
 
+window.toggleInlineTimeEdit = function(woId, type, index) {
+    const key = `${woId}-${type}-${index}`;
+    const display = document.getElementById(`pe-display-${key}`);
+    const form = document.getElementById(`pe-edit-${key}`);
+    if (display && form) {
+        display.style.display = 'none';
+        form.style.display = 'inline-flex';
+        form.classList.remove('hidden');
+    }
+};
+
+window.cancelInlineTimeEdit = function(woId, type, index) {
+    const key = `${woId}-${type}-${index}`;
+    const display = document.getElementById(`pe-display-${key}`);
+    const form = document.getElementById(`pe-edit-${key}`);
+    if (display && form) {
+        form.style.display = 'none';
+        form.classList.add('hidden');
+        display.style.display = 'inline-flex';
+    }
+};
+
+window.saveInlineTimeEdit = async function(woId, type, index) {
+    const key = `${woId}-${type}-${index}`;
+    const dateVal = document.getElementById(`pe-date-${key}`)?.value;
+    const timeVal = document.getElementById(`pe-time-${key}`)?.value;
+
+    if (!dateVal || !timeVal) {
+        showToast('Please enter both date and time.', 'error');
+        return;
+    }
+
+    const newTimestamp = new Date(`${dateVal}T${timeVal}`).getTime();
+    if (isNaN(newTimestamp)) {
+        showToast('Invalid date or time format.', 'error');
+        return;
+    }
+
+    try {
+        const woRes = await fetch(`${API_BASE}/work-orders/${woId}`);
+        const wo = await woRes.json();
+        const payload = {};
+
+        if (type === 'start') {
+            payload.time_in = new Date(newTimestamp).toISOString();
+        } else if (type === 'end') {
+            payload.time_out = new Date(newTimestamp).toISOString();
+        } else {
+            const history = wo.pause_history || [];
+            if (history[index]) {
+                history[index].at = newTimestamp;
+                history.sort((a, b) => a.at - b.at);
+                payload.pause_history = history;
+                if (history[index].type === 'end') {
+                    payload.time_out = new Date(newTimestamp).toISOString();
+                }
+            }
+        }
+
+        const res = await fetch(`${API_BASE}/work-orders/${woId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            const pauseState = getPauseState();
+            delete pauseState[woId];
+            savePauseState(pauseState);
+
+            showToast('Timestamp updated and recalculated.', 'success');
+            
+            if (currentJobOrder) openJobDetail(currentJobOrder.id);
+            if (openWorkOrderDrawerId === woId) {
+                openWorkOrderDrawer(woId, true);
+            }
+            loadDashboard();
+        } else {
+            throw new Error('Update failed');
+        }
+    } catch {
+        showToast('Failed to update timestamp.', 'error');
+    }
+};
+
 window.openEditTimeModal = function(woId, type, index, timestamp) {
+    const key = `${woId}-${type}-${index}`;
+    const form = document.getElementById(`pe-edit-${key}`);
+    if (form) {
+        toggleInlineTimeEdit(woId, type, index);
+        return;
+    }
     const date = new Date(timestamp);
     const dateStr = date.toISOString().split('T')[0];
     const timeStr = date.toTimeString().split(' ')[0]; // HH:MM:SS
